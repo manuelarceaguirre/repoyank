@@ -10,7 +10,7 @@ from textual.containers import Horizontal, Vertical, ScrollableContainer
 from textual.reactive import reactive
 from textual.widgets import Header, Footer, DirectoryTree, Button, Static, Input, Label, Markdown
 from textual.widgets._tree import TreeNode
-from textual.widgets._directory_tree import DirEntry # Standard DirEntry usually has .path as str
+from textual.widgets._directory_tree import DirEntry
 from textual.binding import Binding
 from textual.screen import ModalScreen
 from textual.css.query import NoMatches
@@ -67,6 +67,12 @@ def save_recent_folders(folder_path: Path, current_list: List[Path]):
 
 
 class CheckableDirectoryTree(DirectoryTree):
+    BINDINGS = [
+        Binding("enter", "toggle_expand_or_select", "Toggle Expand/Select", show=False, priority=True),
+        # Space will still trigger 'select_cursor' from base Tree bindings,
+        # which in turn emits NodeSelected, handled by on_directory_tree_node_selected.
+    ]
+
     class SelectionChanged(Message):
         def __init__(self, selected_paths: Set[Path], project_root: Path) -> None:
             super().__init__()
@@ -89,30 +95,33 @@ class CheckableDirectoryTree(DirectoryTree):
         try:
             if not abs_path_obj.is_relative_to(self.project_root) and abs_path_obj != self.project_root: return True
         except ValueError: return True
-        for pattern_str in DEFAULT_IGNORES + self.additional_ignored_patterns:
+
+        current_ignore_patterns = DEFAULT_IGNORES + self.additional_ignored_patterns
+        for pattern_str in current_ignore_patterns:
             if pattern_str.endswith('/'):
                 dir_name_to_ignore = pattern_str.rstrip('/')
                 if dir_name_to_ignore in abs_path_obj.parts or \
-                   (abs_path_obj.is_dir() and abs_path_obj.name == dir_name_to_ignore): return True
-            elif fnmatch.fnmatch(abs_path_obj.name, pattern_str): return True
+                   (abs_path_obj.is_dir() and abs_path_obj.name == dir_name_to_ignore):
+                    return True
+            elif fnmatch.fnmatch(abs_path_obj.name, pattern_str):
+                return True
         
         path_to_check_str = str(abs_path_obj)
-        dirs_to_check_for_gitignore = []
-        temp_dir = abs_path_obj.parent
-        while temp_dir != temp_dir.parent and (temp_dir.is_relative_to(self.project_root) or temp_dir == self.project_root):
-            dirs_to_check_for_gitignore.append(temp_dir)
-            if temp_dir == self.project_root: break
-            temp_dir = temp_dir.parent
-        if self.project_root not in dirs_to_check_for_gitignore and (self.project_root == abs_path_obj.parent or self.project_root == abs_path_obj):
-             dirs_to_check_for_gitignore.append(self.project_root)
+        dirs_to_check_for_gitignore = [self.project_root]
+        if abs_path_obj.parent != self.project_root and abs_path_obj.parent.is_relative_to(self.project_root):
+            current_dir = abs_path_obj.parent
+            while current_dir != self.project_root and current_dir != current_dir.parent :
+                dirs_to_check_for_gitignore.append(current_dir)
+                if not current_dir.is_relative_to(self.project_root): break
+                current_dir = current_dir.parent
         
-        for gitignore_dir in dirs_to_check_for_gitignore:
+        for gitignore_dir in reversed(dirs_to_check_for_gitignore):
             matcher = self._gitignore_matchers.get(gitignore_dir)
             if matcher is None:
                 gf_path = gitignore_dir / ".gitignore"
                 if gf_path.is_file():
                     try: matcher = gitignore_parser.parse_gitignore(str(gf_path), base_dir=str(gitignore_dir))
-                    except Exception as e: self.app.log(f"Warn: Parse {gf_path}: {e}"); matcher = lambda p: False
+                    except Exception as e: self.app.log(f"Warning: Parse {gf_path}: {e}"); matcher = lambda p: False
                 else: matcher = lambda p: False
                 self._gitignore_matchers[gitignore_dir] = matcher
             if callable(matcher) and matcher(path_to_check_str): return True
@@ -121,7 +130,6 @@ class CheckableDirectoryTree(DirectoryTree):
     def render_node(self, node: TreeNode[DirEntry]) -> str:
         rich_label = super().render_node(node)
         if node.data is None: return rich_label
-        # node.data.path here is the string path from DirEntry, convert to Path for consistency
         node_fs_path = Path(node.data.path)
         is_selected = node_fs_path in self.selected_paths
         prefix = "[green]✓[/] " if is_selected else "[dim]][ ] [/]"
@@ -130,15 +138,17 @@ class CheckableDirectoryTree(DirectoryTree):
         return final_label
 
     def _toggle_single_node_selection(self, node_fs_path: Path):
-        if self._is_path_ignored(node_fs_path):
-            self.app.bell(); return
-        if node_fs_path in self.selected_paths: self.selected_paths.discard(node_fs_path)
-        else: self.selected_paths.add(node_fs_path)
+        if node_fs_path in self.selected_paths:
+            self.selected_paths.discard(node_fs_path)
+        else:
+            if self._is_path_ignored(node_fs_path):
+                self.app.bell(); return
+            self.selected_paths.add(node_fs_path)
         self.refresh()
         self.post_message(self.SelectionChanged(self.selected_paths.copy(), self.project_root))
 
     def _toggle_node_and_children_selection(self, node_fs_path: Path):
-        if self._is_path_ignored(node_fs_path) and not node_fs_path in self.selected_paths:
+        if node_fs_path.is_file() and self._is_path_ignored(node_fs_path) and not (node_fs_path in self.selected_paths):
             self.app.bell(); return
         new_select_state = not (node_fs_path in self.selected_paths)
         self._apply_selection_recursive(node_fs_path, new_select_state)
@@ -146,75 +156,69 @@ class CheckableDirectoryTree(DirectoryTree):
         self.post_message(self.SelectionChanged(self.selected_paths.copy(), self.project_root))
 
     def _apply_selection_recursive(self, node_fs_path: Path, select_state: bool):
-        if not self._is_path_ignored(node_fs_path) or not select_state:
-            if select_state: self.selected_paths.add(node_fs_path)
-            else: self.selected_paths.discard(node_fs_path)
-            if node_fs_path.is_dir(): # Use Path.is_dir() here
-                try:
-                    for child_item_path in node_fs_path.iterdir():
-                        self._apply_selection_recursive(child_item_path, select_state)
-                except OSError as e: self.app.log(f"OS Error applying recursive selection for {node_fs_path}: {e}")
+        if select_state:
+            if not self._is_path_ignored(node_fs_path): self.selected_paths.add(node_fs_path)
+        else: self.selected_paths.discard(node_fs_path)
+        
+        if node_fs_path.is_dir():
+            try:
+                for child_item_path in node_fs_path.iterdir():
+                    self._apply_selection_recursive(child_item_path, select_state)
+            except OSError as e: self.app.log(f"OS Error applying recursive selection for {node_fs_path}: {e}")
 
-    def on_directory_tree_node_selected(self, event: DirectoryTree.NodeSelected) -> None:
+    def action_toggle_expand_or_select(self) -> None:
+        """
+        Called when 'enter' is pressed.
+        - Expands/collapses directories.
+        - Toggles selection for files.
+        """
+        if self.cursor_node and self.cursor_node.data:
+            node_fs_path = Path(self.cursor_node.data.path)
+            if node_fs_path.is_dir():
+                self.action_toggle_node() # Built-in Tree action to expand/collapse
+            elif node_fs_path.is_file():
+                self._toggle_single_node_selection(node_fs_path)
+            # else: (e.g. broken symlink, or other non-file/non-dir type if any) do nothing
+        
+    def on_directory_tree_node_selected(self, event: DirectoryTree.NodeSelected) -> None: # Click or Space
         event.stop()
         if event.node.data is None: return
-        # Convert event.node.data.path (str) to Path object for consistency
         self._toggle_single_node_selection(Path(event.node.data.path))
         
     async def on_key(self, event: events.Key) -> None:
         if self.cursor_node is None or self.cursor_node.data is None :
             event.prevent_default(); return 
         
-        # Ensure node_fs_path is a Path object for consistent operations
-        node_fs_path = Path(self.cursor_node.data.path) 
-        node_is_dir = node_fs_path.is_dir() # Use pathlib.Path.is_dir()
-
-        if event.key == "j": self.action_cursor_down()
-        elif event.key == "k": self.action_cursor_up()
-        elif event.key == "l": 
-            if node_is_dir and self.cursor_node.allow_expand and not self.cursor_node.is_expanded:
-                self.action_toggle_node() 
-        elif event.key == "h": 
-            if node_is_dir and self.cursor_node.is_expanded:
-                self.action_toggle_node() 
-            elif self.cursor_node.parent and self.cursor_node.parent.is_tree_root is False: 
-                self.action_select_parent() 
-        elif event.key == "enter":
-            if node_is_dir:
-                self.action_toggle_node()
-            else: 
-                self._toggle_single_node_selection(node_fs_path)
-        elif event.key == "x": 
-            self._toggle_node_and_children_selection(node_fs_path)
-        else: return 
-        event.prevent_default()
-
+        if event.key == "j": self.action_cursor_down(); event.prevent_default()
+        elif event.key == "k": self.action_cursor_up(); event.prevent_default()
+        elif event.key in ("h", "l"): event.prevent_default()
+        else: return
 
     def get_selected_final_files(self) -> List[Path]:
         collected_files: Set[Path] = set()
         current_selection_snapshot = list(self.selected_paths)
-        for path_obj in current_selection_snapshot: # path_obj here is already a Path from selected_paths
+        for path_obj in current_selection_snapshot:
             if self._is_path_ignored(path_obj): continue
-            
-            if path_obj.is_dir(): # path_obj is a Path object
+            if path_obj.is_dir():
                 for item in path_obj.rglob("*"):
-                    if not self._is_path_ignored(item) and item.is_file():
-                        if not is_binary_heuristic(item) and get_file_size_mb(item) <= MAX_FILE_SIZE_MB:
+                    if item.is_file():
+                        if not self._is_path_ignored(item) and \
+                           not is_binary_heuristic(item) and \
+                           get_file_size_mb(item) <= MAX_FILE_SIZE_MB:
                             collected_files.add(item)
-            elif path_obj.is_file(): # path_obj is a Path object
-                 if not is_binary_heuristic(path_obj) and get_file_size_mb(path_obj) <= MAX_FILE_SIZE_MB:
+            elif path_obj.is_file():
+                 if not self._is_path_ignored(path_obj) and \
+                    not is_binary_heuristic(path_obj) and \
+                    get_file_size_mb(path_obj) <= MAX_FILE_SIZE_MB:
                     collected_files.add(path_obj)
         
         relative_collected_files = set()
         if self.project_root:
             for abs_file_path in sorted(list(collected_files)):
                 try:
-                    # Check if abs_file_path is actually under project_root before making relative
-                    if abs_file_path.is_relative_to(self.project_root) or abs_file_path == self.project_root:
+                    if abs_file_path.is_relative_to(self.project_root):
                          relative_collected_files.add(abs_file_path.relative_to(self.project_root))
-                    # else: self.app.log(f"Collected file {abs_file_path} is not under project root {self.project_root}")
-                except ValueError: # Should ideally not happen if is_relative_to is used correctly
-                     self.app.log(f"ValueError making {abs_file_path} relative to {self.project_root}")
+                except ValueError: self.app.log(f"ValueError making {abs_file_path} relative to {self.project_root}")
         return sorted(list(relative_collected_files))
 
 class PathInputScreen(ModalScreen[Optional[Path]]):
@@ -289,14 +293,15 @@ class RepoPackerApp(App[None]):
     """
     BINDINGS = [
         Binding("ctrl+q", "quit", "Quit", priority=True),
-        Binding("ctrl+o", "open_folder", "Open Folder"),
-        Binding("ctrl+s", "generate_packed_file", "Generate File"),
-        Binding("a", "select_all_tree", "Select All (project)"),
-        Binding("d", "deselect_all_tree", "Deselect All (project)"),
-        Binding("x", "select_current_recursive", "Select Node Recursively (Tree Focus)"),
+        Binding("f5", "open_folder", "Open Folder", show=True),
+        Binding("f6", "generate_packed_file", "Generate File", show=True),
+        Binding("a", "select_all_tree", "Select All (Project)"),
+        Binding("d", "deselect_all_tree", "Deselect All (Project)"),
+        Binding("ctrl+a", "select_in_focused_folder", "Sel Content (Focused Dir)"),
+        Binding("ctrl+d", "deselect_in_focused_folder", "Desel Content (Focused Dir)"),
     ]
     current_project_path: reactive[Optional[Path]] = reactive(None)
-    status_message = reactive("Ready. Ctrl+O to Open.")
+    status_message = reactive("Ready. F5 to Open.")
 
     def __init__(self, initial_path: Optional[Path] = None):
         super().__init__()
@@ -325,9 +330,10 @@ class RepoPackerApp(App[None]):
         
         try:
             if self.query(CheckableDirectoryTree):
-                tree_instance = self.query_one(CheckableDirectoryTree)
-                # Initialize sidebar based on (likely empty) selection from new tree
-                tree_instance.post_message(CheckableDirectoryTree.SelectionChanged(tree_instance.selected_paths, tree_instance.project_root))
+                tree_instance_list = self.query(CheckableDirectoryTree)
+                if tree_instance_list:
+                    tree_instance = tree_instance_list.first()
+                    tree_instance.post_message(CheckableDirectoryTree.SelectionChanged(set(), tree_instance.project_root))
             else: self.query_one("#selected_files_md", Markdown).update("### Selected Files\n\n_None selected_")
         except Exception as e: self.log(f"Error in on_mount sidebar clearing: {e}")
 
@@ -339,12 +345,16 @@ class RepoPackerApp(App[None]):
         except NoMatches: pass
 
         if new_path and new_path.is_dir():
-            tree_panel.mount(CheckableDirectoryTree(str(new_path), id="dir_tree"))
+            tree = CheckableDirectoryTree(str(new_path), id="dir_tree")
+            tree_panel.mount(tree)
+            # Ensure the tree is focused after mounting if it's the primary widget
+            self.call_after_refresh(tree.focus)
+
             save_recent_folders(new_path, self.recent_folders); self.recent_folders = load_recent_folders()
             self.sub_title = str(new_path); self.status_message = f"Project: {new_path.name}. Select items."
         else:
-            tree_panel.mount(Static("Ctrl+O to open a folder or select from recent.", id="tree_placeholder"))
-            self.sub_title = "No Project"; self.status_message = "No project. Ctrl+O to Open."
+            tree_panel.mount(Static("F5 to open a folder or select from recent.", id="tree_placeholder"))
+            self.sub_title = "No Project"; self.status_message = "No project. F5 to Open."
             if old_path and not new_path: self.notify("Folder selection cancelled or failed.", severity="warning")
 
     def watch_status_message(self, new_message: str) -> None:
@@ -354,33 +364,23 @@ class RepoPackerApp(App[None]):
     async def on_checkable_directory_tree_selection_changed(self, event: CheckableDirectoryTree.SelectionChanged) -> None:
         try:
             md_widget = self.query_one("#selected_files_md", Markdown)
-            if not event.selected_paths: md_widget.update("### Selected Files\n\n_None selected_")
-            else:
-                display_items = []
-                project_root_for_rel = event.project_root
-                temp_final_files_for_sidebar_display = set()
-                for p_obj in event.selected_paths: # These are Path objects
-                    if self._is_path_ignored_for_app(p_obj, project_root_for_rel): continue
-                    if p_obj.is_file(): # Check Path object
-                        if not is_binary_heuristic(p_obj) and get_file_size_mb(p_obj) <= MAX_FILE_SIZE_MB:
-                             temp_final_files_for_sidebar_display.add(p_obj)
-                    elif p_obj.is_dir(): # Check Path object
-                        for item in p_obj.rglob("*"):
-                            if not self._is_path_ignored_for_app(item, project_root_for_rel) and item.is_file():
-                                if not is_binary_heuristic(item) and get_file_size_mb(item) <= MAX_FILE_SIZE_MB:
-                                    temp_final_files_for_sidebar_display.add(item)
-                
-                for abs_path in sorted(list(temp_final_files_for_sidebar_display)):
-                    try:
-                        if abs_path.is_relative_to(project_root_for_rel):
-                            display_items.append(f"- `{abs_path.relative_to(project_root_for_rel)}`")
-                        else: display_items.append(f"- `{abs_path}` (external)")
-                    except ValueError: display_items.append(f"- `{abs_path}` (rel error)")
+            if not event.selected_paths:
+                md_widget.update("### Selected Files\n\n_None selected_")
+                return
 
-                title = f"### Selected Files ({len(display_items)})" if display_items else "### Selected Files\n\n_None selected_"
-                md_content = title + "\n\n" + "\n".join(display_items if display_items else ["_No individual files to display based on current selection._"])
-                md_widget.update(md_content)
-        except NoMatches: self.log("Error: #selected_files_md widget not found.")
+            tree = self.query_one(CheckableDirectoryTree)
+            final_packable_files = tree.get_selected_final_files()
+
+            if not final_packable_files:
+                md_widget.update("### Selected Files\n\n_No packable files based on current selection._")
+                return
+
+            display_items = [f"- `{str(rel_path)}`" for rel_path in sorted(final_packable_files)]
+            title = f"### Selected Files ({len(display_items)})"
+            md_content = title + "\n\n" + "\n".join(display_items)
+            md_widget.update(md_content)
+        except NoMatches: self.log("Error: #selected_files_md or CheckableDirectoryTree widget not found for sidebar update.")
+        except Exception as e: self.log(f"Error updating sidebar on selection change: {e}")
 
     def _is_path_ignored_for_app(self, path_obj: Path, project_root: Path) -> bool:
         abs_path_obj = path_obj.resolve() if not path_obj.is_absolute() else path_obj
@@ -406,33 +406,51 @@ class RepoPackerApp(App[None]):
             tree = self.query_one(CheckableDirectoryTree)
             tree.selected_paths.clear()
             if tree.project_root:
-                for path_obj in tree.project_root.rglob("*"):
-                    if not tree._is_path_ignored(path_obj): tree.selected_paths.add(path_obj)
+                 tree._apply_selection_recursive(tree.project_root, select_state=True)
             tree.refresh()
             tree.post_message(CheckableDirectoryTree.SelectionChanged(tree.selected_paths.copy(), tree.project_root))
-            self.status_message = f"{len(tree.selected_paths)} non-ignored items marked. Review tree."
+            final_selected_count = len(tree.selected_paths)
+            self.status_message = f"{final_selected_count} items marked. Review tree and sidebar."
         except NoMatches: self.status_message = "No project tree loaded."; self.bell()
         except Exception as e: self.status_message = f"Error selecting all: {e}"; self.log(f"Select All Error: {e}"); self.bell()
 
     def action_deselect_all_tree(self) -> None:
         try:
             tree = self.query_one(CheckableDirectoryTree)
-            tree.selected_paths.clear(); tree.refresh()
+            if tree.project_root:
+                 tree._apply_selection_recursive(tree.project_root, select_state=False)
+            else: tree.selected_paths.clear()
+            tree.refresh()
             tree.post_message(CheckableDirectoryTree.SelectionChanged(tree.selected_paths.copy(), tree.project_root))
             self.status_message = "All selections cleared."
         except NoMatches: self.status_message = "No project tree loaded to deselect from."; self.bell()
 
-    def action_select_current_recursive(self) -> None: # Bound to 'x'
+    def _operate_on_focused_folder_contents(self, select_state: bool):
         try:
             tree = self.query_one(CheckableDirectoryTree)
-            # Ensure tree has focus AND there's a cursor node with data
-            if tree.has_focus and tree.cursor_node and tree.cursor_node.data:
-                tree._toggle_node_and_children_selection(Path(tree.cursor_node.data.path))
-            else: # No focused tree, or no cursor on a valid item
-                self.bell() 
-        except NoMatches: # No tree widget found
+            if tree.cursor_node and tree.cursor_node.data:
+                node_fs_path = Path(tree.cursor_node.data.path)
+                if node_fs_path.is_dir():
+                    tree._apply_selection_recursive(node_fs_path, select_state=select_state)
+                    tree.refresh()
+                    tree.post_message(CheckableDirectoryTree.SelectionChanged(tree.selected_paths.copy(), tree.project_root))
+                    action = "Selected" if select_state else "Deselected"
+                    self.status_message = f"{action} contents of '{node_fs_path.name}'."
+                else:
+                    self.status_message = "Focused item is not a directory. Use Space to toggle selection."
+                    self.bell() 
+            else:
+                self.status_message = "No item focused in the tree."
+                self.bell()
+        except NoMatches:
+            self.status_message = "No project tree loaded."
             self.bell()
 
+    def action_select_in_focused_folder(self) -> None:
+        self._operate_on_focused_folder_contents(select_state=True)
+
+    def action_deselect_in_focused_folder(self) -> None:
+        self._operate_on_focused_folder_contents(select_state=False)
 
     async def action_generate_packed_file(self) -> None:
         if not self.current_project_path:
@@ -445,7 +463,7 @@ class RepoPackerApp(App[None]):
         if not selected_relative_paths:
             self.status_message = "Warning: No files selected or eligible for packing."; self.bell(); return
         
-        _final_output_str_for_clipboard = ""
+        _final_output_str_for_clipboard = "" 
         output_parts = []
         output_parts.append(f"This file is a merged representation of selected codebase parts from '{self.current_project_path.name}', combined by RepoPacker.\n")
         output_parts.append("<file_summary>")
@@ -495,16 +513,19 @@ class RepoPackerApp(App[None]):
                 if event.button.id == "save_btn":
                     save_name = self.query_one("#save_path_input", Input).value
                     if save_name:
-                        save_dir = self.project_path.parent if self.project_path and self.project_path.parent else Path.home()
+                        save_dir = self.project_path.parent if self.project_path and self.project_path.parent != self.project_path else Path.home()
                         self.dismiss(save_dir / save_name)
                     else: self.app.bell()
                 elif event.button.id == "copy_btn":
                     try:
-                        import pyperclip
+                        import pyperclip 
                         pyperclip.copy(_final_output_str_for_clipboard)
                         self.app.notify("Content copied to clipboard!", severity="information")
+                    except ImportError:
+                        self.app.notify("Error: pyperclip module not found. Cannot copy to clipboard.", severity="error", timeout=5)
+                        self.app.log("pyperclip module not found. Please install it to use copy to clipboard.")
                     except Exception as e:
-                        self.app.notify(f"Clipboard error: {e}. (pyperclip installed?)", severity="error")
+                        self.app.notify(f"Clipboard error: {e}", severity="error")
                         self.app.log(f"Clipboard error: {e}")
                     self.dismiss(None)
                 elif event.button.id == "cancel_btn":
@@ -523,7 +544,9 @@ class RepoPackerApp(App[None]):
             except Exception as e:
                 self.status_message = f"Error saving file: {e}"
                 self.notify(self.status_message, severity="error", timeout=5); self.log(e); self.bell()
-        else: self.status_message = "File generation cancelled or action completed."
+        else: 
+            if _final_output_str_for_clipboard and not self.query_one("#status_bar", Static).renderable == "Content copied to clipboard!":
+                 self.status_message = "File generation/action completed or cancelled."
 
 
 if __name__ == "__main__":
@@ -532,4 +555,5 @@ if __name__ == "__main__":
     if len(sys.argv) > 1:
         path_arg = Path(sys.argv[1])
         if path_arg.is_dir(): initial_folder = path_arg
+        else: print(f"Warning: Provided path '{path_arg}' is not a valid directory. Starting without initial project.")
     app = RepoPackerApp(initial_path=initial_folder); app.run()
