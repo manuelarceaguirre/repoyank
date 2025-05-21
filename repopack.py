@@ -128,62 +128,32 @@ class CheckableDirectoryTree(DirectoryTree):
         return False
 
     def _is_node_effectively_selected_file(self, file_path: Path) -> bool:
-        """
-        Checks if a given file_path (assumed to be a file) will be included in the final pack.
-        This means it's not ignored, not binary, within size limits, AND
-        either directly selected or under a selected parent directory.
-        """
-        # Check 1: Is the file itself valid for packing (not ignored, not binary, not too large)?
-        # (Caller `render_label` already ensures file_path.is_file())
-        if self._is_path_ignored(file_path):
-            return False
-        if is_binary_heuristic(file_path) or get_file_size_mb(file_path) > MAX_FILE_SIZE_MB:
-            return False
-
-        # Check 2: Is the file directly selected?
-        if file_path in self.selected_paths:
-            return True
-
-        # Check 3: Is any parent directory (up to project_root) directly selected?
+        if self._is_path_ignored(file_path): return False
+        if is_binary_heuristic(file_path) or get_file_size_mb(file_path) > MAX_FILE_SIZE_MB: return False
+        if file_path in self.selected_paths: return True
         current_parent = file_path.parent
-        # Iterate upwards from the file's immediate parent
         while current_parent != self.project_root.parent and \
               (current_parent == self.project_root or current_parent.is_relative_to(self.project_root)):
-            if current_parent in self.selected_paths:
-                # If a parent is selected, and the file itself is valid (Check 1), then it's packed.
-                return True
-            if current_parent == self.project_root: # Stop if we've checked the project root itself
-                break
+            if current_parent in self.selected_paths: return True
+            if current_parent == self.project_root: break
             prev_parent = current_parent
             current_parent = current_parent.parent
-            if current_parent == prev_parent : # Reached filesystem root (e.g. C:\ or /)
-                break
-            
+            if current_parent == prev_parent : break
         return False
 
     def render_label(
         self, node: TreeNode[DirEntry], base_style: Style, style: Style
     ) -> Text:
-        # Get the default label (filename/foldername with icon) from the superclass
         rendered_label_from_super = super().render_label(node, base_style, style)
-        
-        if node.data is None: 
-            return Text("Error: No data") 
-
+        if node.data is None: return Text("Error: No data") 
         node_fs_path = Path(node.data.path)
-        
-        # Prefix for direct selection (checkmark or empty box)
         is_directly_selected = node_fs_path in self.selected_paths
         prefix_text = Text.from_markup("[green]✓[/] " if is_directly_selected else "[dim]][ ] [/]")
-        
         final_renderable = Text("")
         final_renderable.append(prefix_text)
         final_renderable.append(rendered_label_from_super)
-
-        # Add a "(pack)" badge for files that will effectively be included in the output
         if node_fs_path.is_file() and self._is_node_effectively_selected_file(node_fs_path):
-            final_renderable.append_text(Text(" [b #40E0D0](pack)[/b]", no_wrap=True)) # Turquoise badge
-
+            final_renderable.append_text(Text(" [b #40E0D0](pack)[/b]", no_wrap=True))
         return final_renderable
 
     def _toggle_single_node_selection(self, node_fs_path: Path):
@@ -193,7 +163,7 @@ class CheckableDirectoryTree(DirectoryTree):
             if self._is_path_ignored(node_fs_path):
                 self.app.bell(); return
             self.selected_paths.add(node_fs_path)
-        self.refresh() # Refresh will re-render nodes, updating badges
+        self.refresh()
         self.post_message(self.SelectionChanged(self.selected_paths.copy(), self.project_root))
 
     def _toggle_node_and_children_selection(self, node_fs_path: Path):
@@ -239,14 +209,7 @@ class CheckableDirectoryTree(DirectoryTree):
 
     def get_selected_final_files(self) -> List[Path]:
         collected_files: Set[Path] = set()
-        # Need to iterate through all files in the project and check if they meet criteria
-        # based on self.selected_paths and their own validity.
-        
-        # This temporary set helps avoid re-checking files if they are under multiple selected paths
-        # (though that's less likely with a simple selected_paths set).
         already_processed_for_collection: Set[Path] = set()
-
-        # First, collect all files that are *directly* selected and valid
         for path_obj in self.selected_paths:
             if path_obj.is_file() and path_obj not in already_processed_for_collection:
                 if not self._is_path_ignored(path_obj) and \
@@ -254,8 +217,6 @@ class CheckableDirectoryTree(DirectoryTree):
                    get_file_size_mb(path_obj) <= MAX_FILE_SIZE_MB:
                     collected_files.add(path_obj)
                 already_processed_for_collection.add(path_obj)
-
-        # Next, for selected *directories*, collect their valid child files
         for path_obj in self.selected_paths:
             if path_obj.is_dir():
                 try:
@@ -266,8 +227,7 @@ class CheckableDirectoryTree(DirectoryTree):
                                get_file_size_mb(item) <= MAX_FILE_SIZE_MB:
                                 collected_files.add(item)
                             already_processed_for_collection.add(item)
-                except OSError as e:
-                    self.app.log(f"OS Error rglobbing {path_obj}: {e}")
+                except OSError as e: self.app.log(f"OS Error rglobbing {path_obj}: {e}")
         
         relative_collected_files = set()
         if self.project_root:
@@ -349,16 +309,20 @@ class RepoPackerApp(App[None]):
     #output_preview_dialog Input { margin-bottom: 1;}
     """
     BINDINGS = [
-        Binding("ctrl+q", "quit", "Quit", priority=True),
-        Binding("f5", "open_folder", "Open Folder", show=True),
-        Binding("f6", "generate_packed_file", "Generate File", show=True),
-        Binding("a", "select_all_tree", "Select All (Project)"),
-        Binding("d", "deselect_all_tree", "Deselect All (Project)"),
-        Binding("ctrl+a", "select_in_focused_folder", "Sel Content (Focused Dir)"),
-        Binding("ctrl+d", "deselect_in_focused_folder", "Desel Content (Focused Dir)"),
+        Binding("ctrl+q", "quit", "Quit", show=True, priority=True),
+        Binding("f5", "open_folder", "Open Folder", show=False),      # Hidden
+        Binding("f6", "generate_packed_file", "Generate File", show=False), # Hidden
+        Binding("a", "select_all_tree", "Select All (Project)", show=True),
+        Binding("d", "deselect_all_tree", "Deselect All (Project)", show=True),
+        Binding("ctrl+a", "select_in_focused_folder", "Sel Content (Dir)", show=True),
+        Binding("ctrl+d", "deselect_in_focused_folder", "Desel Content (Dir)", show=True),
+        # Override default App bindings to hide them from the footer
+        Binding("ctrl+backslash", "command_palette", "Palette", show=False, key_display="Ctrl+\\"),
+        Binding("f1", "toggle_dark", "Dark/Light", show=False),
+        Binding("question_mark", "app.help", "Help", show=False),
     ]
     current_project_path: reactive[Optional[Path]] = reactive(None)
-    status_message = reactive("Ready. F5 to Open.")
+    status_message = reactive("Ready.") # Updated status
 
     def __init__(self, initial_path: Optional[Path] = None):
         super().__init__()
@@ -383,14 +347,14 @@ class RepoPackerApp(App[None]):
             if self.arg_initial_path:
                  self.notify(f"Initial path '{self.arg_initial_path}' not valid.", severity="warning", timeout=4)
         
-        if not initial_path_set: await self.action_open_folder()
+        if not initial_path_set: await self.action_open_folder() # Still functional via F5
         
         try:
             if self.query(CheckableDirectoryTree):
                 tree_instance_list = self.query(CheckableDirectoryTree)
                 if tree_instance_list:
                     tree_instance = tree_instance_list.first()
-                    if tree_instance.project_root: # Ensure project_root is not None
+                    if tree_instance.project_root:
                         tree_instance.post_message(CheckableDirectoryTree.SelectionChanged(set(), tree_instance.project_root))
             else: self.query_one("#selected_files_md", Markdown).update("### Selected Files\n\n_None selected_")
         except Exception as e: self.log(f"Error in on_mount sidebar clearing: {e}")
@@ -405,13 +369,13 @@ class RepoPackerApp(App[None]):
         if new_path and new_path.is_dir():
             tree = CheckableDirectoryTree(str(new_path), id="dir_tree")
             tree_panel.mount(tree)
-            self.call_after_refresh(tree.focus) # Ensure tree gets focus
+            self.call_after_refresh(tree.focus)
 
             save_recent_folders(new_path, self.recent_folders); self.recent_folders = load_recent_folders()
             self.sub_title = str(new_path); self.status_message = f"Project: {new_path.name}. Select items."
         else:
-            tree_panel.mount(Static("F5 to open a folder or select from recent.", id="tree_placeholder"))
-            self.sub_title = "No Project"; self.status_message = "No project. F5 to Open."
+            tree_panel.mount(Static("No project loaded. Open a folder to begin.", id="tree_placeholder")) # Updated placeholder
+            self.sub_title = "No Project"; self.status_message = "No project. Open a folder to begin."      # Updated status
             if old_path and not new_path: self.notify("Folder selection cancelled or failed.", severity="warning")
 
     def watch_status_message(self, new_message: str) -> None:
@@ -421,38 +385,19 @@ class RepoPackerApp(App[None]):
     async def on_checkable_directory_tree_selection_changed(self, event: CheckableDirectoryTree.SelectionChanged) -> None:
         try:
             md_widget = self.query_one("#selected_files_md", Markdown)
-            # We rely on get_selected_final_files to show what will *actually* be packed.
-            # The event.selected_paths are just the directly marked nodes.
-            
-            tree = self.query_one(CheckableDirectoryTree) # Get the tree instance
-            final_packable_files = tree.get_selected_final_files() # This returns relative paths
-
+            tree = self.query_one(CheckableDirectoryTree)
+            final_packable_files = tree.get_selected_final_files()
             if not final_packable_files:
                 md_widget.update("### Selected Files\n\n_No packable files based on current selection._")
                 return
-
             display_items = [f"- `{str(rel_path)}`" for rel_path in sorted(final_packable_files)]
             title = f"### Selected Files ({len(display_items)})"
             md_content = title + "\n\n" + "\n".join(display_items)
             md_widget.update(md_content)
-
         except NoMatches: self.log("Error: #selected_files_md or CheckableDirectoryTree widget not found for sidebar update.")
         except Exception as e: self.log(f"Error updating sidebar on selection change: {e}")
 
-    def _is_path_ignored_for_app(self, path_obj: Path, project_root: Path) -> bool: # Not directly used by badge logic
-        abs_path_obj = path_obj.resolve() if not path_obj.is_absolute() else path_obj
-        try:
-            if not abs_path_obj.is_relative_to(project_root) and abs_path_obj != project_root: return True
-        except ValueError: return True
-        for pattern_str in DEFAULT_IGNORES:
-            if pattern_str.endswith('/'):
-                dir_name_to_ignore = pattern_str.rstrip('/')
-                if dir_name_to_ignore in abs_path_obj.parts or \
-                   (abs_path_obj.is_dir() and abs_path_obj.name == dir_name_to_ignore): return True
-            elif fnmatch.fnmatch(abs_path_obj.name, pattern_str): return True
-        return False
-
-    async def action_open_folder(self) -> None:
+    async def action_open_folder(self) -> None: # Still functional via F5
         def set_new_path(path: Optional[Path]):
             if path: self.current_project_path = path
             elif not self.current_project_path: self.notify("No folder selected.", severity="information")
@@ -461,13 +406,10 @@ class RepoPackerApp(App[None]):
     def action_select_all_tree(self) -> None:
         try:
             tree = self.query_one(CheckableDirectoryTree)
-            # tree.selected_paths.clear() # _apply_selection_recursive handles this better
             if tree.project_root:
                  tree._apply_selection_recursive(tree.project_root, select_state=True)
             tree.refresh()
             tree.post_message(CheckableDirectoryTree.SelectionChanged(tree.selected_paths.copy(), tree.project_root))
-            # Count actual selected items might be tricky here, rely on sidebar.
-            # Or count non-ignored items in tree.selected_paths for a rough estimate for status.
             status_count = sum(1 for p in tree.selected_paths if not tree._is_path_ignored(p))
             self.status_message = f"{status_count} items directly marked. Review tree/sidebar."
         except NoMatches: self.status_message = "No project tree loaded."; self.bell()
@@ -478,7 +420,7 @@ class RepoPackerApp(App[None]):
             tree = self.query_one(CheckableDirectoryTree)
             if tree.project_root:
                  tree._apply_selection_recursive(tree.project_root, select_state=False)
-            else: tree.selected_paths.clear() # Fallback
+            else: tree.selected_paths.clear()
             tree.refresh()
             tree.post_message(CheckableDirectoryTree.SelectionChanged(tree.selected_paths.copy(), tree.project_root))
             self.status_message = "All selections cleared."
@@ -511,7 +453,7 @@ class RepoPackerApp(App[None]):
     def action_deselect_in_focused_folder(self) -> None:
         self._operate_on_focused_folder_contents(select_state=False)
 
-    async def action_generate_packed_file(self) -> None:
+    async def action_generate_packed_file(self) -> None: # Still functional via F6
         if not self.current_project_path:
             self.status_message = "Error: No project folder loaded."; self.bell(); return
         try:
