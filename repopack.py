@@ -315,7 +315,7 @@ class RepoPackerApp(App[None]):
     BINDINGS = [
         Binding("ctrl+q", "quit", "Quit", show=True, priority=True),
         Binding("f5", "open_folder", "Open Folder", show=False), 
-        Binding("f6", "generate_packed_file", "Copy Prompt", show=True),
+        Binding("c", "generate_packed_file", "Copy Prompt", show=True), # CHANGED F6 to c
         Binding("a", "select_all_tree", "Select All (Project)", show=True),
         Binding("d", "deselect_all_tree", "Deselect All (Project)", show=True),
         Binding("ctrl+a", "select_in_focused_folder", "Sel Content (Dir)", show=True),
@@ -325,7 +325,7 @@ class RepoPackerApp(App[None]):
         Binding("question_mark", "app.help", "Help", show=False),
     ]
     current_project_path: reactive[Optional[Path]] = reactive(None)
-    status_message = reactive("Ready. F5 to Open, F6 to Copy Prompt.")
+    status_message = reactive("Ready. F5 to Open, 'c' to Copy Prompt.") # UPDATED STATUS
 
     def __init__(self, initial_path: Optional[Path] = None):
         super().__init__()
@@ -375,10 +375,10 @@ class RepoPackerApp(App[None]):
             self.call_after_refresh(tree.focus)
 
             save_recent_folders(new_path, self.recent_folders); self.recent_folders = load_recent_folders()
-            self.sub_title = str(new_path); self.status_message = f"Project: {new_path.name}. Select items. F6 to Copy Prompt."
+            self.sub_title = str(new_path); self.status_message = f"Project: {new_path.name}. Select items. 'c' to Copy Prompt." # UPDATED STATUS
         else:
             tree_panel.mount(Static("No project loaded. Open a folder to begin (F5).", id="tree_placeholder"))
-            self.sub_title = "No Project"; self.status_message = "No project. Open (F5), Copy Prompt (F6)."
+            self.sub_title = "No Project"; self.status_message = "No project. Open (F5), Copy Prompt ('c')." # UPDATED STATUS
             if old_path and not new_path: self.notify("Folder selection cancelled or failed.", severity="warning")
 
     def watch_status_message(self, new_message: str) -> None:
