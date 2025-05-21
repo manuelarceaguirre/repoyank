@@ -248,20 +248,47 @@ class CheckableDirectoryTree(DirectoryTree):
 
 class PathInputScreen(ModalScreen[Optional[Path]]):
     BINDINGS = [Binding("escape", "cancel", "Cancel")]
+
     def __init__(self, recent_folders: List[Path]):
-        super().__init__(); self.recent_folders = recent_folders
+        super().__init__()
+        self.recent_folders = recent_folders
+        self.input_widget: Optional[Input] = None 
+
     def compose(self) -> ComposeResult:
         with Vertical(id="dialog"):
             yield Label("Select or Enter Project Path:", classes="dialog_title")
             if self.recent_folders:
-                yield Label("Recent folders (press number or use Up/Down then Enter):")
+                yield Label("Recent folders (press number or use Up/Down then Enter in input):")
                 with ScrollableContainer(id="recent_list"):
                     for i, folder in enumerate(self.recent_folders):
                         yield Button(f"{i+1}. {str(folder)}", id=f"recent_{i}", classes="recent_folder_button")
-            yield Input(placeholder="Type path or number for recent (then Enter)", id="path_input")
+            self.input_widget = Input(placeholder="Type path or press number for recent (then Enter)", id="path_input")
+            yield self.input_widget
             with Horizontal(classes="dialog_buttons"):
                 yield Button("OK", variant="primary", id="ok_button")
                 yield Button("Cancel", variant="error", id="cancel_button")
+
+    async def on_mount(self) -> None:
+        if self.input_widget:
+            self.input_widget.focus()
+
+    async def on_key(self, event: events.Key) -> None:
+        # self.app.log(f"PathInputScreen on_key: {event.key}, input_focused: {self.input_widget.has_focus if self.input_widget else 'N/A'}") # Debugging
+        
+        # Check if a digit 1-9 is pressed (for recent folders up to 9)
+        # and ensure the main input widget itself is not focused to avoid interference.
+        if event.key.isdigit() and '0' not in event.key: # Allow 1-9
+            if self.input_widget and not self.input_widget.has_focus:
+                try:
+                    index = int(event.key) - 1
+                    if 0 <= index < len(self.recent_folders) and index < 9: # Limit to 9 recent items by direct key press
+                        self.dismiss(self.recent_folders[index].resolve())
+                        event.prevent_default() 
+                        return
+                except ValueError:
+                    pass 
+        # Allow other keys to propagate for default handling by focused widget or screen bindings
+        
 
     async def on_input_submitted(self, event: Input.Submitted) -> None:
         path_str = event.value.strip()
@@ -269,27 +296,40 @@ class PathInputScreen(ModalScreen[Optional[Path]]):
             try:
                 index = int(path_str) - 1
                 if 0 <= index < len(self.recent_folders):
-                    self.dismiss(self.recent_folders[index].resolve()); return
-            except ValueError: pass
+                    self.dismiss(self.recent_folders[index].resolve())
+                    return
+            except ValueError:
+                pass 
         
         if path_str:
             path = Path(path_str).resolve()
-            if path.is_dir(): self.dismiss(path)
+            if path.is_dir():
+                self.dismiss(path)
             else:
-                self.query_one(Input).placeholder = "Invalid path/number. Try again."
-                self.query_one(Input).value = ""; self.app.bell()
-        else: self.app.bell()
+                if self.input_widget:
+                    self.input_widget.placeholder = "Invalid path/number. Try again."
+                    self.input_widget.value = ""
+                self.app.bell()
+        else: 
+            self.app.bell()
+
 
     async def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "ok_button":
-            await self.on_input_submitted(Input.Submitted(self.query_one(Input), self.query_one(Input).value))
-        elif event.button.id == "cancel_button": self.dismiss(None)
+            if self.input_widget:
+                await self.on_input_submitted(Input.Submitted(self.input_widget, self.input_widget.value))
+        elif event.button.id == "cancel_button":
+            self.dismiss(None)
         elif event.button.id and event.button.id.startswith("recent_"):
             try:
                 index = int(event.button.id.split("_")[1])
-                if 0 <= index < len(self.recent_folders): self.dismiss(self.recent_folders[index].resolve())
-            except (ValueError, IndexError): self.app.bell()
-    def action_cancel(self) -> None: self.dismiss(None)
+                if 0 <= index < len(self.recent_folders):
+                    self.dismiss(self.recent_folders[index].resolve())
+            except (ValueError, IndexError):
+                self.app.bell()
+                
+    def action_cancel(self) -> None:
+        self.dismiss(None)
 
 
 class RepoPackerApp(App[None]):
@@ -315,7 +355,7 @@ class RepoPackerApp(App[None]):
     BINDINGS = [
         Binding("ctrl+q", "quit", "Quit", show=True, priority=True),
         Binding("f5", "open_folder", "Open Folder", show=False), 
-        Binding("c", "generate_packed_file", "Copy Prompt", show=True), # CHANGED F6 to c
+        Binding("c", "generate_packed_file", "Copy Prompt", show=True),
         Binding("a", "select_all_tree", "Select All (Project)", show=True),
         Binding("d", "deselect_all_tree", "Deselect All (Project)", show=True),
         Binding("ctrl+a", "select_in_focused_folder", "Sel Content (Dir)", show=True),
@@ -325,7 +365,7 @@ class RepoPackerApp(App[None]):
         Binding("question_mark", "app.help", "Help", show=False),
     ]
     current_project_path: reactive[Optional[Path]] = reactive(None)
-    status_message = reactive("Ready. F5 to Open, 'c' to Copy Prompt.") # UPDATED STATUS
+    status_message = reactive("Ready. F5 to Open, 'c' to Copy Prompt.")
 
     def __init__(self, initial_path: Optional[Path] = None):
         super().__init__()
@@ -375,10 +415,10 @@ class RepoPackerApp(App[None]):
             self.call_after_refresh(tree.focus)
 
             save_recent_folders(new_path, self.recent_folders); self.recent_folders = load_recent_folders()
-            self.sub_title = str(new_path); self.status_message = f"Project: {new_path.name}. Select items. 'c' to Copy Prompt." # UPDATED STATUS
+            self.sub_title = str(new_path); self.status_message = f"Project: {new_path.name}. Select items. 'c' to Copy Prompt."
         else:
             tree_panel.mount(Static("No project loaded. Open a folder to begin (F5).", id="tree_placeholder"))
-            self.sub_title = "No Project"; self.status_message = "No project. Open (F5), Copy Prompt ('c')." # UPDATED STATUS
+            self.sub_title = "No Project"; self.status_message = "No project. Open (F5), Copy Prompt ('c')."
             if old_path and not new_path: self.notify("Folder selection cancelled or failed.", severity="warning")
 
     def watch_status_message(self, new_message: str) -> None:
