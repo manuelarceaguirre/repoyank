@@ -16,10 +16,11 @@ from textual.screen import ModalScreen
 from textual.css.query import NoMatches
 from textual.message import Message
 from textual import events
-from textual.style import Style # Added for type hinting in render_label
-from rich.text import Text      # Added for constructing rich text labels
+from textual.style import Style
+from rich.text import Text
 
 import gitignore_parser
+import pyperclip # For clipboard operations
 
 # --- Configuration ---
 DEFAULT_IGNORES = [
@@ -199,13 +200,20 @@ class CheckableDirectoryTree(DirectoryTree):
         self._toggle_single_node_selection(Path(event.node.data.path))
         
     async def on_key(self, event: events.Key) -> None:
-        if self.cursor_node is None or self.cursor_node.data is None :
-            event.prevent_default(); return 
+        key_handled_by_us = False
+        if event.key == "j":
+            if self.cursor_node is not None:
+                self.action_cursor_down()
+            key_handled_by_us = True
+        elif event.key == "k":
+            if self.cursor_node is not None:
+                self.action_cursor_up()
+            key_handled_by_us = True
+        elif event.key in ("h", "l"):
+            key_handled_by_us = True
         
-        if event.key == "j": self.action_cursor_down(); event.prevent_default()
-        elif event.key == "k": self.action_cursor_up(); event.prevent_default()
-        elif event.key in ("h", "l"): event.prevent_default()
-        else: return
+        if key_handled_by_us:
+            event.prevent_default()
 
     def get_selected_final_files(self) -> List[Path]:
         collected_files: Set[Path] = set()
@@ -303,26 +311,21 @@ class RepoPackerApp(App[None]):
     Input { margin-bottom: 1; }
     .dialog_buttons { width: 100%; align-horizontal: right; margin-top:1; }
     .dialog_buttons Button { margin-left: 1; }
-    #output_preview_dialog { align: center middle; width: 90%; height: 90%; border: thick $primary; background: $surface; padding: 1; }
-    #output_preview_dialog Markdown { margin-bottom: 1; background: $primary-background-darken-1; padding: 1; border: round $accent;}
-    #output_preview_dialog Static { margin-bottom: 1;}
-    #output_preview_dialog Input { margin-bottom: 1;}
     """
     BINDINGS = [
         Binding("ctrl+q", "quit", "Quit", show=True, priority=True),
-        Binding("f5", "open_folder", "Open Folder", show=False),      # Hidden
-        Binding("f6", "generate_packed_file", "Generate File", show=False), # Hidden
+        Binding("f5", "open_folder", "Open Folder", show=False), 
+        Binding("f6", "generate_packed_file", "Copy Prompt", show=True),
         Binding("a", "select_all_tree", "Select All (Project)", show=True),
         Binding("d", "deselect_all_tree", "Deselect All (Project)", show=True),
         Binding("ctrl+a", "select_in_focused_folder", "Sel Content (Dir)", show=True),
         Binding("ctrl+d", "deselect_in_focused_folder", "Desel Content (Dir)", show=True),
-        # Override default App bindings to hide them from the footer
         Binding("ctrl+backslash", "command_palette", "Palette", show=False, key_display="Ctrl+\\"),
         Binding("f1", "toggle_dark", "Dark/Light", show=False),
         Binding("question_mark", "app.help", "Help", show=False),
     ]
     current_project_path: reactive[Optional[Path]] = reactive(None)
-    status_message = reactive("Ready.") # Updated status
+    status_message = reactive("Ready. F5 to Open, F6 to Copy Prompt.")
 
     def __init__(self, initial_path: Optional[Path] = None):
         super().__init__()
@@ -347,7 +350,7 @@ class RepoPackerApp(App[None]):
             if self.arg_initial_path:
                  self.notify(f"Initial path '{self.arg_initial_path}' not valid.", severity="warning", timeout=4)
         
-        if not initial_path_set: await self.action_open_folder() # Still functional via F5
+        if not initial_path_set: await self.action_open_folder()
         
         try:
             if self.query(CheckableDirectoryTree):
@@ -372,10 +375,10 @@ class RepoPackerApp(App[None]):
             self.call_after_refresh(tree.focus)
 
             save_recent_folders(new_path, self.recent_folders); self.recent_folders = load_recent_folders()
-            self.sub_title = str(new_path); self.status_message = f"Project: {new_path.name}. Select items."
+            self.sub_title = str(new_path); self.status_message = f"Project: {new_path.name}. Select items. F6 to Copy Prompt."
         else:
-            tree_panel.mount(Static("No project loaded. Open a folder to begin.", id="tree_placeholder")) # Updated placeholder
-            self.sub_title = "No Project"; self.status_message = "No project. Open a folder to begin."      # Updated status
+            tree_panel.mount(Static("No project loaded. Open a folder to begin (F5).", id="tree_placeholder"))
+            self.sub_title = "No Project"; self.status_message = "No project. Open (F5), Copy Prompt (F6)."
             if old_path and not new_path: self.notify("Folder selection cancelled or failed.", severity="warning")
 
     def watch_status_message(self, new_message: str) -> None:
@@ -397,7 +400,7 @@ class RepoPackerApp(App[None]):
         except NoMatches: self.log("Error: #selected_files_md or CheckableDirectoryTree widget not found for sidebar update.")
         except Exception as e: self.log(f"Error updating sidebar on selection change: {e}")
 
-    async def action_open_folder(self) -> None: # Still functional via F5
+    async def action_open_folder(self) -> None:
         def set_new_path(path: Optional[Path]):
             if path: self.current_project_path = path
             elif not self.current_project_path: self.notify("No folder selected.", severity="information")
@@ -453,101 +456,106 @@ class RepoPackerApp(App[None]):
     def action_deselect_in_focused_folder(self) -> None:
         self._operate_on_focused_folder_contents(select_state=False)
 
-    async def action_generate_packed_file(self) -> None: # Still functional via F6
+    async def action_generate_packed_file(self) -> None: # "Copy Prompt"
         if not self.current_project_path:
-            self.status_message = "Error: No project folder loaded."; self.bell(); return
+            self.notify("Error: No project folder loaded.", severity="error", timeout=3); self.bell(); return
         try:
             tree = self.query_one(CheckableDirectoryTree)
             selected_relative_paths = tree.get_selected_final_files()
-        except NoMatches: self.status_message = "Error: Project tree not found."; self.bell(); return
+        except NoMatches: 
+            self.notify("Error: Project tree not found.", severity="error", timeout=3); self.bell(); return
         
         if not selected_relative_paths:
-            self.status_message = "Warning: No files selected or eligible for packing."; self.bell(); return
+            self.notify("Warning: No files selected or eligible for packing.", severity="warning", timeout=3); self.bell(); return
         
-        _final_output_str_for_clipboard = "" 
         output_parts = []
-        output_parts.append(f"This file is a merged representation of selected codebase parts from '{self.current_project_path.name}', combined by RepoPacker.\n")
+        
         output_parts.append("<file_summary>")
-        output_parts.append(f"<source_project_path>{str(self.current_project_path)}</source_project_path>")
-        output_parts.append("<purpose>This file contains a packed representation of selected repository contents for LLM consumption, analysis, or review.</purpose>")
-        output_parts.append("<file_format>\n1. This summary section\n2. Directory structure (selected files only)\n3. Selected repository files, each consisting of:\n  - File path as an attribute (relative to project root)\n  - Full contents of the file\n</file_format>")
-        output_parts.append(f"<usage_guidelines>\n- Read-only. Edit original files.\n- Use file paths to distinguish files.\n- Aware of potential sensitive info.\n</usage_guidelines>")
-        output_parts.append(f"<notes>\n- Text files only.\n- Ignores: .gitignore, defaults (e.g., .git, node_modules), size limit (>{MAX_FILE_SIZE_MB}MB).\n- Binaries heuristically excluded.\n</notes>")
-        output_parts.append("</file_summary>\n")
+        output_parts.append("This section contains a summary of this file.")
+        output_parts.append("") 
+        output_parts.append("<purpose>")
+        output_parts.append("This file contains a packed representation of selected repository contents.")
+        output_parts.append("It is designed to be easily consumable by AI systems for analysis, code review,")
+        output_parts.append("or other automated processes.")
+        output_parts.append("</purpose>")
+        output_parts.append("") 
+        output_parts.append("<file_format>")
+        output_parts.append("The content is organized as follows:")
+        output_parts.append("1. This summary section")
+        output_parts.append("2. Directory structure of selected files")
+        output_parts.append("3. Selected repository files, each consisting of:")
+        output_parts.append("  - File path as an attribute (relative to project root)")
+        output_parts.append("  - Full contents of the file")
+        output_parts.append("</file_format>")
+        output_parts.append("") 
+        output_parts.append("<usage_guidelines>")
+        output_parts.append("- This file should be treated as read-only. Any changes should be made to the")
+        output_parts.append("  original repository files, not this packed version.")
+        output_parts.append("- When processing this file, use the file path to distinguish")
+        output_parts.append("  between different files in the repository.")
+        output_parts.append("- Be aware that this file may contain sensitive information. Handle it with")
+        output_parts.append("  the same level of security as you would the original repository.")
+        output_parts.append("</usage_guidelines>")
+        output_parts.append("") 
+        output_parts.append("<notes>")
+        output_parts.append("- Files are selected based on user interaction and ignore rules.")
+        output_parts.append("- Binary files (based on a heuristic) are excluded.")
+        output_parts.append("- Files matching patterns in .gitignore (if present) and default ignore patterns (e.g., .git, __pycache__) are typically excluded from selection and packing.")
+        output_parts.append(f"- File size limits may apply (currently >{MAX_FILE_SIZE_MB}MB excluded).")
+        output_parts.append("</notes>")
+        output_parts.append("") 
+        output_parts.append("<additional_info>")
+        output_parts.append(f"Generated by RepoPacker TUI from project: {self.current_project_path.name}")
+        output_parts.append("</additional_info>")
+        output_parts.append("</file_summary>")
+        output_parts.append("") 
+        
         output_parts.append("<directory_structure>")
-        for rel_path in selected_relative_paths: output_parts.append(str(rel_path).replace('\\', '/'))
-        output_parts.append("</directory_structure>\n")
+        for rel_path in selected_relative_paths: 
+            output_parts.append(str(rel_path).replace('\\', '/')) 
+        output_parts.append("</directory_structure>")
+        output_parts.append("") 
+        
         output_parts.append("<files>")
-        output_parts.append("This section contains the contents of the repository's selected files.\n")
+        output_parts.append("This section contains the contents of the repository's selected files.")
+        if selected_relative_paths:
+             output_parts.append("")
 
-        files_processed_count = 0; total_char_count = 0
-        for rel_path in selected_relative_paths:
+        files_processed_count = 0
+        self.status_message = "Preparing content for clipboard..."
+        await asyncio.sleep(0.01)
+
+        for i, rel_path in enumerate(selected_relative_paths):
             full_path = self.current_project_path / rel_path
-            self.status_message = f"Processing: {rel_path}"; await asyncio.sleep(0)
             try:
                 with open(full_path, 'r', encoding='utf-8', errors='replace') as f: content = f.read()
                 normalized_rel_path = str(rel_path).replace('\\', '/')
-                output_parts.append(f'<file path="{normalized_rel_path}">'); output_parts.append(content); output_parts.append("</file>\n")
-                files_processed_count += 1; total_char_count += len(content)
+                output_parts.append(f'<file path="{normalized_rel_path}">')
+                output_parts.append(content)
+                output_parts.append("</file>")
+                if i < len(selected_relative_paths) - 1:
+                    output_parts.append("") 
+                files_processed_count += 1
             except Exception as e:
                 self.log(f"Error reading file {full_path}: {e}")
-                output_parts.append(f'<file path="{str(rel_path).replace("\\", "/")}">\nError reading file: {e}\n</file>\n')
+                output_parts.append(f'<file path="{str(rel_path).replace("\\", "/")}">{os.linesep}Error reading file: {e}{os.linesep}</file>')
+                if i < len(selected_relative_paths) - 1:
+                    output_parts.append("")
         output_parts.append("</files>")
-        _final_output_str_for_clipboard = "\n".join(output_parts); estimated_tokens = total_char_count // 3
+        final_output_str = "\n".join(output_parts)
 
-        class OutputPreviewScreen(ModalScreen[Optional[Path]]):
-            def __init__(self, default_filename: str, project_path: Path, num_files: int, est_tokens: int):
-                super().__init__()
-                self.default_filename = default_filename; self.project_path = project_path
-                self.num_files = num_files; self.est_tokens = est_tokens
-            def compose(self) -> ComposeResult:
-                with Vertical(id="output_preview_dialog"):
-                    yield Label("Pack Complete & Save", classes="dialog_title")
-                    yield Markdown(f"- **Project:** `{self.project_path.name}`\n- **Files Packed:** {self.num_files}\n- **Est. Tokens:** ~{self.est_tokens:,} (chars/3)")
-                    yield Static("Save as (in project's parent dir or Home):")
-                    yield Input(self.default_filename, id="save_path_input")
-                    with Horizontal(classes="dialog_buttons"):
-                        yield Button("Save", variant="success", id="save_btn")
-                        yield Button("Copy to Clipboard", id="copy_btn")
-                        yield Button("Cancel", variant="error", id="cancel_btn")
-            async def on_button_pressed(self, event: Button.Pressed) -> None:
-                if event.button.id == "save_btn":
-                    save_name = self.query_one("#save_path_input", Input).value
-                    if save_name:
-                        save_dir = self.project_path.parent if self.project_path and self.project_path.parent != self.project_path else Path.home()
-                        self.dismiss(save_dir / save_name)
-                    else: self.app.bell()
-                elif event.button.id == "copy_btn":
-                    try:
-                        import pyperclip 
-                        pyperclip.copy(_final_output_str_for_clipboard)
-                        self.app.notify("Content copied to clipboard!", severity="information")
-                    except ImportError:
-                        self.app.notify("Error: pyperclip module not found. Cannot copy to clipboard.", severity="error", timeout=5)
-                        self.app.log("pyperclip module not found. Please install it to use copy to clipboard.")
-                    except Exception as e:
-                        self.app.notify(f"Clipboard error: {e}", severity="error")
-                        self.app.log(f"Clipboard error: {e}")
-                    self.dismiss(None)
-                elif event.button.id == "cancel_btn":
-                    self.dismiss(None)
-
-        default_save_name = f"packed_{self.current_project_path.name}_{files_processed_count}files.txt"
-        save_path_result = await self.app.push_screen_wait(
-            OutputPreviewScreen(default_save_name, self.current_project_path, files_processed_count, estimated_tokens)
-        )
-
-        if save_path_result:
-            try:
-                with open(save_path_result, "w", encoding="utf-8") as f: f.write(_final_output_str_for_clipboard)
-                self.status_message = f"Success! {files_processed_count} files packed to {save_path_result}"
-                self.notify(self.status_message, severity="information", timeout=5)
-            except Exception as e:
-                self.status_message = f"Error saving file: {e}"
-                self.notify(self.status_message, severity="error", timeout=5); self.log(e); self.bell()
-        else: 
-            if _final_output_str_for_clipboard and not self.query_one("#status_bar", Static).renderable == "Content copied to clipboard!":
-                 self.status_message = "File generation/action completed or cancelled."
+        try:
+            pyperclip.copy(final_output_str)
+            self.notify(f"{files_processed_count} files packed into prompt and copied to clipboard!", severity="information", timeout=4)
+            self.status_message = "Prompt copied to clipboard."
+        except pyperclip.PyperclipException as e:
+            self.log(f"Clipboard copy error: {e}")
+            self.notify("Error copying to clipboard. Is pyperclip installed and configured?", severity="error", timeout=5)
+            self.status_message = "Clipboard error."
+        except Exception as e:
+            self.log(f"Unexpected error during prompt generation/copy: {e}")
+            self.notify("An unexpected error occurred. See logs.", severity="error", timeout=5)
+            self.status_message = "Error generating prompt."
 
 
 if __name__ == "__main__":
