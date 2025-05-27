@@ -2,10 +2,10 @@
 import asyncio
 import os
 from pathlib import Path
+import sys # Import sys to access command-line arguments
 from typing import Set, List, Optional, Iterable, Dict, Tuple
 import fnmatch
 
-# NEW: Import platformdirs
 import platformdirs
 
 from textual.app import App, ComposeResult, Screen
@@ -23,28 +23,14 @@ from textual.style import Style
 from rich.text import Text
 
 import gitignore_parser
-import pyperclip # For clipboard operations
+import pyperclip
 
 # --- Configuration ---
 APP_NAME = "RepoPackerTUI"
-APP_AUTHOR = "RepoPackerUser" # You can change this
-
-# Use platformdirs to get a user data directory
-# This will create a path like:
-# Linux: ~/.local/share/RepoPackerTUI/
-# macOS: ~/Library/Application Support/RepoPackerTUI/
-# Windows: C:\Users\<User>\AppData\Local\RepoPackerUser\RepoPackerTUI\
+APP_AUTHOR = "RepoPackerUser"
 APP_DATA_DIR = Path(platformdirs.user_data_dir(appname=APP_NAME, appauthor=APP_AUTHOR))
-
-# Ensure the application data directory exists
 APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
-
-# Update the path for your recent folders file to be inside APP_DATA_DIR
 RECENT_FOLDERS_FILE = APP_DATA_DIR / "repopacker_recent.txt"
-# If you had other config/data files, they'd go here too:
-# LOG_FILE = APP_DATA_DIR / "app.log"
-# SETTINGS_FILE = APP_DATA_DIR / "settings.json"
-
 
 DEFAULT_IGNORES = [
     ".git/", ".hg/", ".svn/", "__pycache__/", "*.pyc", "*.pyo", "*.pyd",
@@ -65,8 +51,7 @@ DEFAULT_IGNORES = [
 MAX_FILE_SIZE_MB = 10
 MAX_RECENT_ENTRIES = 10
 
-# --- Helper Functions ---
-# No changes needed in the functions themselves, they use the RECENT_FOLDERS_FILE variable.
+# --- Helper Functions (no changes) ---
 def is_binary_heuristic(filepath: Path, sample_size=1024) -> bool:
     try:
         with open(filepath, 'rb') as f: sample = f.read(sample_size)
@@ -89,56 +74,37 @@ def save_recent_folders(folder_path: Path, current_list: List[Path]):
     try:
         with open(RECENT_FOLDERS_FILE, "w", encoding="utf-8") as f:
             for p in new_list[:MAX_RECENT_ENTRIES]: f.write(str(p) + "\n")
-    except Exception as e:
-        # It's good to log this if the app instance is available,
-        # otherwise print for now.
-        print(f"Error saving recent folders to {RECENT_FOLDERS_FILE}: {e}")
+    except Exception as e: print(f"Error saving recent folders to {RECENT_FOLDERS_FILE}: {e}")
 
 
-class CheckableDirectoryTree(DirectoryTree):
+class CheckableDirectoryTree(DirectoryTree): # (Keep as is from previous correct version)
     BINDINGS = [
         Binding("enter", "toggle_expand_or_select", "Expand Dir (Enter)", show=False, priority=True),
         Binding("space", "space_pressed_on_item", "Select File / Expand Dir (Space)", show=False, priority=True),
         Binding("s", "toggle_selection_recursive_cursor", "Select Item Recursively (S)", show=False, priority=True),
     ]
-
     class SelectionChanged(Message):
         def __init__(self, selected_paths: Set[Path], project_root: Path) -> None:
-            super().__init__()
-            self.selected_paths = selected_paths
-            self.project_root = project_root
-
+            super().__init__(); self.selected_paths = selected_paths; self.project_root = project_root
     def __init__(self, path: str, id: Optional[str] = None, ignored_patterns: Optional[List[str]] = None):
         super().__init__(path, id=id)
-        self.selected_paths: Set[Path] = set()
-        self.project_root = Path(path).resolve()
-        self._gitignore_matchers: dict[Path, Optional[callable]] = {}
-        self.additional_ignored_patterns = ignored_patterns or []
-        self._ignored_paths_cache: Dict[Path, bool] = {}
-        self._binary_heuristic_cache: Dict[Path, bool] = {}
-        self._file_size_cache: Dict[Path, float] = {}
-        self._precompiled_default_ignores: List[Tuple[str, bool, str]] = []
+        self.selected_paths: Set[Path] = set(); self.project_root = Path(path).resolve()
+        self._gitignore_matchers: dict[Path, Optional[callable]] = {}; self.additional_ignored_patterns = ignored_patterns or []
+        self._ignored_paths_cache: Dict[Path, bool] = {}; self._binary_heuristic_cache: Dict[Path, bool] = {}
+        self._file_size_cache: Dict[Path, float] = {}; self._precompiled_default_ignores: List[Tuple[str, bool, str]] = []
         for pattern_str in DEFAULT_IGNORES + self.additional_ignored_patterns:
-            is_dir_pattern = pattern_str.endswith('/')
-            normalized_name_pattern = pattern_str.rstrip('/') if is_dir_pattern else pattern_str
-            self._precompiled_default_ignores.append(
-                (normalized_name_pattern, is_dir_pattern, pattern_str)
-            )
-
+            is_dir_pattern = pattern_str.endswith('/'); normalized_name_pattern = pattern_str.rstrip('/') if is_dir_pattern else pattern_str
+            self._precompiled_default_ignores.append((normalized_name_pattern, is_dir_pattern, pattern_str))
     def filter_paths(self, paths: Iterable[Path]) -> Iterable[Path]:
         for path_obj in paths:
-            if not self._is_path_ignored(path_obj): 
-                yield path_obj
-
+            if not self._is_path_ignored(path_obj): yield path_obj
     def _is_path_ignored(self, path_obj: Path) -> bool:
         abs_path_obj = path_obj.resolve() if not path_obj.is_absolute() else path_obj.resolve()
-        if abs_path_obj in self._ignored_paths_cache:
-            return self._ignored_paths_cache[abs_path_obj]
+        if abs_path_obj in self._ignored_paths_cache: return self._ignored_paths_cache[abs_path_obj]
         try:
             if not abs_path_obj.is_relative_to(self.project_root) and abs_path_obj != self.project_root:
                 self._ignored_paths_cache[abs_path_obj] = True; return True
-        except ValueError: 
-            self._ignored_paths_cache[abs_path_obj] = True; return True
+        except ValueError: self._ignored_paths_cache[abs_path_obj] = True; return True
         for compiled_name_pattern, is_dir_pattern, original_fnmatch_pattern in self._precompiled_default_ignores:
             if is_dir_pattern:
                 if (abs_path_obj.is_dir() and abs_path_obj.name == compiled_name_pattern) or \
@@ -146,11 +112,9 @@ class CheckableDirectoryTree(DirectoryTree):
                     self._ignored_paths_cache[abs_path_obj] = True; return True
             elif fnmatch.fnmatch(abs_path_obj.name, original_fnmatch_pattern):
                 self._ignored_paths_cache[abs_path_obj] = True; return True
-        path_to_check_str = str(abs_path_obj)
-        dirs_to_check_for_gitignore = [self.project_root]
+        path_to_check_str = str(abs_path_obj); dirs_to_check_for_gitignore = [self.project_root]
         try: 
-            if abs_path_obj.parent != self.project_root and \
-               abs_path_obj.parent.is_relative_to(self.project_root):
+            if abs_path_obj.parent != self.project_root and abs_path_obj.parent.is_relative_to(self.project_root):
                 current_dir = abs_path_obj.parent
                 while current_dir != self.project_root and current_dir != current_dir.parent :
                     dirs_to_check_for_gitignore.append(current_dir)
@@ -168,9 +132,7 @@ class CheckableDirectoryTree(DirectoryTree):
                 self._gitignore_matchers[gitignore_dir] = matcher
             if callable(matcher) and matcher(path_to_check_str):
                 self._ignored_paths_cache[abs_path_obj] = True; return True
-        self._ignored_paths_cache[abs_path_obj] = False
-        return False
-
+        self._ignored_paths_cache[abs_path_obj] = False; return False
     def _is_node_effectively_selected_file(self, file_path: Path) -> bool:
         if self._is_path_ignored(file_path): return False 
         is_bin = self._binary_heuristic_cache.get(file_path)
@@ -189,7 +151,6 @@ class CheckableDirectoryTree(DirectoryTree):
             if current_parent == self.project_root: break 
             current_parent = current_parent.parent
         return False
-
     def render_label(self, node: TreeNode[DirEntry], base_style: Style, style: Style) -> Text:
         rendered_label_from_super = super().render_label(node, base_style, style)
         if node.data is None: return Text("Error: No data") 
@@ -200,47 +161,37 @@ class CheckableDirectoryTree(DirectoryTree):
         if node_fs_path.is_file() and self._is_node_effectively_selected_file(node_fs_path): 
             final_renderable.append_text(Text(" [b #40E0D0](pack)[/b]", no_wrap=True))
         return final_renderable
-
     def _toggle_single_node_selection(self, node_fs_path: Path):
         self.app.log(f"Toggling single selection: {node_fs_path}")
-        if node_fs_path in self.selected_paths:
-            self.selected_paths.discard(node_fs_path)
+        if node_fs_path in self.selected_paths: self.selected_paths.discard(node_fs_path)
         else:
             if self._is_path_ignored(node_fs_path): 
                 self.app.log(f"Path ignored, not selecting: {node_fs_path}"); self.app.bell(); return
             self.selected_paths.add(node_fs_path)
-        self.refresh()
-        self.post_message(self.SelectionChanged(self.selected_paths.copy(), self.project_root))
-
+        self.refresh(); self.post_message(self.SelectionChanged(self.selected_paths.copy(), self.project_root))
     def _toggle_node_and_children_selection(self, node_fs_path: Path):
         self.app.log(f"Toggling node and children selection: {node_fs_path}")
         is_currently_selected = node_fs_path in self.selected_paths
         new_select_state = not is_currently_selected
         self._apply_selection_recursive(node_fs_path, new_select_state)
-        self.refresh()
-        self.post_message(self.SelectionChanged(self.selected_paths.copy(), self.project_root))
-
+        self.refresh(); self.post_message(self.SelectionChanged(self.selected_paths.copy(), self.project_root))
     def _apply_selection_recursive(self, node_fs_path: Path, select_state: bool):
         if select_state:
-            if not self._is_path_ignored(node_fs_path): 
-                self.selected_paths.add(node_fs_path)
-        else:
-            self.selected_paths.discard(node_fs_path)
+            if not self._is_path_ignored(node_fs_path): self.selected_paths.add(node_fs_path)
+        else: self.selected_paths.discard(node_fs_path)
         if node_fs_path.is_dir():
             try:
                 for child_item_path in self.filter_paths(node_fs_path.iterdir()): 
                     self._apply_selection_recursive(child_item_path, select_state)
             except OSError as e: self.app.log(f"OS Error applying recursive selection for {node_fs_path}: {e}")
-
-    def action_toggle_expand_or_select(self) -> None: # Bound to Enter
+    def action_toggle_expand_or_select(self) -> None:
         if self.cursor_node and self.cursor_node.data:
             node_fs_path = self.cursor_node.data.path
             if node_fs_path.is_dir():
                 self.app.log(f"Enter on dir: {node_fs_path}, calling action_toggle_node. Current expanded: {self.cursor_node._expanded}")
                 self.action_toggle_node() 
                 self.app.log(f"After action_toggle_node (Enter). New expanded: {self.cursor_node._expanded}")
-    
-    def action_space_pressed_on_item(self) -> None: # Bound to Space
+    def action_space_pressed_on_item(self) -> None:
         if self.cursor_node and self.cursor_node.data:
             node_fs_path = self.cursor_node.data.path
             self.app.log(f"action_space_pressed_on_item on: {node_fs_path}")
@@ -251,14 +202,11 @@ class CheckableDirectoryTree(DirectoryTree):
                 self.app.log(f"Space on dir: {node_fs_path}, calling action_toggle_node. Current expanded: {self.cursor_node._expanded}")
                 self.action_toggle_node() 
                 self.app.log(f"After action_toggle_node (Space). New expanded: {self.cursor_node._expanded}")
-        else:
-            self.app.log("action_space_pressed_on_item: No cursor node or data.")
-
-    def on_tree_node_selected(self, event: Tree.NodeSelected[DirEntry]) -> None: # For Clicks
+        else: self.app.log("action_space_pressed_on_item: No cursor node or data.")
+    def on_tree_node_selected(self, event: Tree.NodeSelected[DirEntry]) -> None:
         event.stop() 
         if event.node is None or event.node.data is None:
-            self.app.log("Tree.NodeSelected (likely click) event with no node or no data.")
-            return
+            self.app.log("Tree.NodeSelected (likely click) event with no node or no data."); return
         node_fs_path = event.node.data.path
         self.app.log(f"Click (Tree.NodeSelected event) on: {node_fs_path}")
         if node_fs_path.is_file():
@@ -266,8 +214,7 @@ class CheckableDirectoryTree(DirectoryTree):
             self._toggle_single_node_selection(node_fs_path)
         elif node_fs_path.is_dir():
             self.app.log(f"Click on dir: {node_fs_path}. Expansion may be handled by default DirectoryTree click behavior. Current expanded state (before potential default toggle): {event.node._expanded}")
-    
-    def action_toggle_selection_recursive_cursor(self) -> None: # Bound to 's'
+    def action_toggle_selection_recursive_cursor(self) -> None:
         self.app.bell() 
         self.app.log("--- 'S' KEY ACTION CALLED (toggle_selection_recursive_cursor) ---") 
         if self.cursor_node and self.cursor_node.data:
@@ -279,9 +226,7 @@ class CheckableDirectoryTree(DirectoryTree):
             elif node_fs_path.is_dir():
                 self.app.log(f"'s' key on dir: {node_fs_path}, toggling recursive selection.")
                 self._toggle_node_and_children_selection(node_fs_path)
-        else:
-            self.app.log("'s' key pressed but no cursor node or data.")
-            
+        else: self.app.log("'s' key pressed but no cursor node or data.")
     async def on_key(self, event: events.Key) -> None:
         key_handled_by_us = False
         if event.key == "j":
@@ -289,7 +234,6 @@ class CheckableDirectoryTree(DirectoryTree):
         elif event.key == "k":
             if self.cursor_node is not None: self.action_cursor_up(); key_handled_by_us = True
         if key_handled_by_us: event.prevent_default()
-
     def get_selected_final_files(self) -> List[Path]:
         collected_files: Set[Path] = set(); already_processed_for_collection: Set[Path] = set() 
         for path_obj_abs in self.selected_paths: 
@@ -326,7 +270,7 @@ class CheckableDirectoryTree(DirectoryTree):
         return sorted(list(relative_collected_files))
 
 
-class PathInputScreen(ModalScreen[Optional[Path]]):
+class PathInputScreen(ModalScreen[Optional[Path]]): # (Keep as is)
     BINDINGS = [
         Binding("escape", "cancel", "Cancel", show=False),
         Binding("up", "cursor_up", "Cursor Up", show=False),
@@ -342,10 +286,8 @@ class PathInputScreen(ModalScreen[Optional[Path]]):
     .recent_folder_item:focus { background: $primary; }
     """
     def __init__(self, recent_folders: List[Path]):
-        super().__init__()
-        self.recent_folders = recent_folders
-        self.input_widget: Optional[Input] = None
-        self.recent_folder_widgets: List[Button] = []
+        super().__init__(); self.recent_folders = recent_folders
+        self.input_widget: Optional[Input] = None; self.recent_folder_widgets: List[Button] = []
         self._current_focus_idx = -1 
     def compose(self) -> ComposeResult:
         self.recent_folder_widgets.clear()
@@ -445,27 +387,61 @@ class RepoPackerApp(App[None]):
     ]
     current_project_path: reactive[Optional[Path]] = reactive(None)
     status_message = reactive("Ready. F5 to Open, 'c' to Copy Prompt.")
-    def __init__(self, initial_path: Optional[Path] = None):
+
+    # MODIFIED: Accept initial_path from constructor
+    def __init__(self, initial_path_from_arg: Optional[Path] = None):
         super().__init__()
-        self.arg_initial_path = initial_path.resolve() if initial_path and initial_path.exists() else None
+        self.arg_initial_path = initial_path_from_arg # Store the path passed from main
         self.recent_folders = load_recent_folders()
         self.log(f"Application data directory: {APP_DATA_DIR}")
         self.log(f"Recent folders file path: {RECENT_FOLDERS_FILE}")
+        if self.arg_initial_path:
+            self.log(f"Initial path from argument: {self.arg_initial_path}")
+        else:
+            self.log("No initial path argument provided.")
 
-    def compose(self) -> ComposeResult:
+    def compose(self) -> ComposeResult: # (Keep as is)
         yield Header()
         with Horizontal(id="app_body"):
             with Vertical(id="tree_panel"): pass
             with ScrollableContainer(id="sidebar_panel"):
                 yield Markdown("### Selected Files\n\n_None selected_", id="selected_files_md")
         yield Static(self.status_message, id="status_bar"); yield Footer()
+
+    # MODIFIED: Use self.arg_initial_path first, then os.getcwd()
     async def on_mount(self) -> None:
-        initial_path_set = False
+        path_to_load: Optional[Path] = None
+        source_of_path: str = ""
+
+        # 1. Try path from command-line argument (passed via constructor)
         if self.arg_initial_path and self.arg_initial_path.is_dir():
-            self.current_project_path = self.arg_initial_path; initial_path_set = True
-        elif self.arg_initial_path:
-            self.notify(f"Initial path '{self.arg_initial_path}' not valid.", severity="warning", timeout=4)
-        if not initial_path_set: await self.action_open_folder()
+            path_to_load = self.arg_initial_path
+            source_of_path = "command-line argument"
+        elif self.arg_initial_path: # Argument provided but not a valid directory
+            self.log(f"Warning: Initial path from argument '{self.arg_initial_path}' is not a valid directory.")
+            self.notify(f"Path '{self.arg_initial_path}' invalid.", severity="warning", timeout=3)
+
+
+        # 2. If no valid arg, try current working directory (os.getcwd())
+        if not path_to_load:
+            try:
+                cwd = Path(os.getcwd())
+                if cwd.is_dir():
+                    path_to_load = cwd
+                    source_of_path = "current working directory (os.getcwd())"
+                else:
+                    self.log(f"Warning: os.getcwd() '{cwd}' is not a valid directory.")
+            except Exception as e:
+                self.log(f"Error getting os.getcwd(): {e}")
+        
+        if path_to_load:
+            self.log(f"Attempting to load initial path from {source_of_path}: {path_to_load}")
+            self.current_project_path = path_to_load
+        else:
+            self.log("No valid initial path found from args or CWD. Opening PathInputScreen.")
+            await self.action_open_folder() # Fallback to manual selection
+        
+        # Ensure sidebar is updated even if no specific selection event fires initially
         try:
             if self.query(CheckableDirectoryTree): 
                 tree_list = self.query(CheckableDirectoryTree) 
@@ -473,7 +449,9 @@ class RepoPackerApp(App[None]):
                     tree_list.first().post_message(CheckableDirectoryTree.SelectionChanged(set(), tree_list.first().project_root)) 
             else: self.query_one("#selected_files_md", Markdown).update("### Selected Files\n\n_None selected_")
         except Exception as e: self.log(f"Error in on_mount sidebar clearing: {e}")
-    def watch_current_project_path(self, old_path: Optional[Path], new_path: Optional[Path]) -> None:
+
+
+    def watch_current_project_path(self, old_path: Optional[Path], new_path: Optional[Path]) -> None: # (Keep as is)
         try: self.query_one("#tree_panel").remove_children()
         except NoMatches: self.log("Error: #tree_panel not found during watch"); return
         try: self.query_one("#selected_files_md", Markdown).update("### Selected Files\n\n_None selected_")
@@ -487,10 +465,12 @@ class RepoPackerApp(App[None]):
             self.query_one("#tree_panel").mount(Static("No project loaded. Open a folder (F5).", id="tree_placeholder"))
             self.sub_title = "No Project"; self.status_message = "No project. Open (F5), Copy ('c')."
             if old_path and not new_path: self.notify("Folder selection cancelled or failed.", severity="warning")
-    def watch_status_message(self, new_message: str) -> None:
+    
+    def watch_status_message(self, new_message: str) -> None: # (Keep as is)
         try: self.query_one("#status_bar", Static).update(new_message)
         except NoMatches: pass
-    async def on_checkable_directory_tree_selection_changed(self, event: CheckableDirectoryTree.SelectionChanged) -> None:
+    
+    async def on_checkable_directory_tree_selection_changed(self, event: CheckableDirectoryTree.SelectionChanged) -> None: # (Keep as is)
         try:
             md_widget = self.query_one("#selected_files_md", Markdown)
             tree = self.query_one(CheckableDirectoryTree) 
@@ -500,12 +480,14 @@ class RepoPackerApp(App[None]):
             md_widget.update(f"### Selected Files ({len(display_items)})\n\n" + "\n".join(display_items))
         except NoMatches: self.log("Error: Widget not found for sidebar update.")
         except Exception as e: self.log(f"Error updating sidebar: {e}")
-    async def action_open_folder(self) -> None:
+    
+    async def action_open_folder(self) -> None: # (Keep as is)
         def set_new_path(path: Optional[Path]):
             if path: self.current_project_path = path
             elif not self.current_project_path: self.notify("No folder selected.", severity="information")
         await self.app.push_screen(PathInputScreen(self.recent_folders), set_new_path)
-    def action_select_all_tree(self) -> None:
+    
+    def action_select_all_tree(self) -> None: # (Keep as is)
         try:
             tree = self.query_one(CheckableDirectoryTree)
             if tree.project_root: tree._apply_selection_recursive(tree.project_root, select_state=True) 
@@ -513,7 +495,8 @@ class RepoPackerApp(App[None]):
             self.status_message = f"{sum(1 for p in tree.selected_paths if not tree._is_path_ignored(p))} items marked."
         except NoMatches: self.status_message = "No project tree loaded."; self.bell()
         except Exception as e: self.status_message = f"Error selecting all: {e}"; self.log(f"Select All Error: {e}"); self.bell()
-    def action_deselect_all_tree(self) -> None:
+    
+    def action_deselect_all_tree(self) -> None: # (Keep as is)
         try:
             tree = self.query_one(CheckableDirectoryTree)
             if tree.project_root: tree._apply_selection_recursive(tree.project_root, select_state=False)
@@ -521,24 +504,25 @@ class RepoPackerApp(App[None]):
             tree.refresh(); tree.post_message(CheckableDirectoryTree.SelectionChanged(tree.selected_paths.copy(), tree.project_root))
             self.status_message = "All selections cleared."
         except NoMatches: self.status_message = "No project tree loaded."; self.bell()
-    def _operate_on_focused_folder_contents(self, select_state: bool):
+    
+    def _operate_on_focused_folder_contents(self, select_state: bool): # (Keep as is)
         try:
             tree = self.query_one(CheckableDirectoryTree)
             if tree.cursor_node and tree.cursor_node.data:
                 node_path = tree.cursor_node.data.path
                 if node_path.is_dir(): 
-                    for child_item in tree.filter_paths(node_path.iterdir()): # Operate on children
+                    for child_item in tree.filter_paths(node_path.iterdir()):
                         tree._apply_selection_recursive(child_item, select_state)
                     tree.refresh(); tree.post_message(CheckableDirectoryTree.SelectionChanged(tree.selected_paths.copy(), tree.project_root))
                     self.status_message = f"{'Selected' if select_state else 'Deselected'} contents of '{node_path.name}'."
                 else: self.status_message = "Focused item is not a directory."; self.bell() 
             else: self.status_message = "No item focused."; self.bell()
         except NoMatches: self.status_message = "No project tree loaded."; self.bell()
-    def action_select_in_focused_folder(self) -> None:
-        self._operate_on_focused_folder_contents(select_state=True)
-    def action_deselect_in_focused_folder(self) -> None:
-        self._operate_on_focused_folder_contents(select_state=False)
-    async def action_generate_packed_file(self) -> None: 
+    
+    def action_select_in_focused_folder(self) -> None: self._operate_on_focused_folder_contents(select_state=True)
+    def action_deselect_in_focused_folder(self) -> None: self._operate_on_focused_folder_contents(select_state=False)
+    
+    async def action_generate_packed_file(self) -> None: # (Keep as is)
         if not self.current_project_path: self.notify("Error: No project folder loaded.", severity="error", timeout=3); self.bell(); return
         try: tree = self.query_one(CheckableDirectoryTree); selected_paths = tree.get_selected_final_files() 
         except NoMatches: self.notify("Error: Project tree not found.", severity="error", timeout=3); self.bell(); return
@@ -552,7 +536,7 @@ class RepoPackerApp(App[None]):
             full_path = self.current_project_path / rel_path
             try:
                 with open(full_path, 'r', encoding='utf-8', errors='replace') as f: content = f.read()
-                output_parts.extend([f'<file path="{str(rel_path).replace("\\", "/")}">', content, '</file>'])
+                output_parts.extend([f'<file path="{str(rel_path).replace("\\", "/")}">{content}</file>'])
                 if i < len(selected_paths) -1: output_parts.append("")
                 files_processed += 1
             except Exception as e:
@@ -566,11 +550,33 @@ class RepoPackerApp(App[None]):
         except Exception as e: self.log(f"Pack error: {e}"); self.notify("Unexpected error.", severity="error", timeout=5); self.status_message = "Error packing."
 
 
+# MODIFIED: Logic to determine initial_path_for_app
 if __name__ == "__main__":
-    import sys
-    initial_folder = None
+    initial_path_for_app: Optional[Path] = None
+    
+    # Check for command-line argument first
     if len(sys.argv) > 1:
-        path_arg = Path(sys.argv[1])
-        if path_arg.is_dir(): initial_folder = path_arg
-        else: print(f"Warning: Path '{path_arg}' not valid directory. Starting without project.")
-    app = RepoPackerApp(initial_path=initial_folder); app.run()
+        path_arg_str = sys.argv[1]
+        # If Neovim passes ".", resolve it to an absolute path based on CWD
+        if path_arg_str == ".":
+            try:
+                path_arg = Path(os.getcwd()).resolve()
+            except Exception as e:
+                print(f"Warning: Could not resolve '.' to current working directory: {e}")
+                path_arg = None # Fallback or handle error
+        else:
+            path_arg = Path(path_arg_str)
+        
+        if path_arg and path_arg.is_dir():
+            initial_path_for_app = path_arg.resolve()
+            print(f"Using initial path from command line argument: {initial_path_for_app}")
+        elif path_arg:
+            print(f"Warning: Provided path argument '{path_arg}' is not a valid directory. Will try CWD or prompt.")
+        else: # path_arg was None from "." resolution failure
+            print(f"Warning: Could not use '.' as initial path. Will try CWD or prompt.")
+
+    # If no valid path from argument, initial_path_for_app is still None
+    # The RepoPackerApp.on_mount() method will then try os.getcwd()
+    
+    app = RepoPackerApp(initial_path_from_arg=initial_path_for_app)
+    app.run()
