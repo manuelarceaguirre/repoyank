@@ -1,0 +1,91 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "repopacker"
+version = "0.1.0"
+description = "Interactive TUI for selecting and packing repository files into an AI-friendly prompt."
+readme = "README.md"
+authors = [
+  { name = "Manuel Arce", email = "author@example.com" },
+]
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Environment :: Console",
+    "Topic :: Software Development",
+    "Topic :: Utilities",
+    "Topic :: Terminals",
+    "Framework :: Textual",
+]
+dependencies = [
+    "textual",
+    "rich",
+    "gitignore-parser",
+    "pyperclip",
+]
+
+[project.urls]
+Homepage = "https://github.com/username/repopacker"
+Repository = "https://github.com/username/repopacker"
+Issues = "https://github.com/username/repopacker/issues"
+
+[project.scripts]
+repopacker = "repopacker.cli:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "ruff>=0.1.0",
+    "black>=23.0",
+    "mypy>=1.0",
+    "textual-dev",
+    "pipdeptree",
+    "mkdocs-material",
+    "mkdocs",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["repopacker*"]
+exclude = ["tests*"]
+
+[tool.ruff]
+line-length = 100
+select = ["E", "F", "W", "I", "UP", "ANN", "ASYNC", "TRIO", "BLE", "B", "A", "C4", "DTZ", "EM", "EXE", "ISC", "ICN", "INP", "PIE", "PYI", "PT", "Q", "RSE", "RET", "SLF", "SIM", "TID", "TCH", "ARG", "PTH", "ERA", "PD", "PGH", "PLC", "PLE", "PLR", "PLW", "RUF"]
+ignore = ["ANN101", "ANN102", "ANN401"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.black]
+line-length = 100
+target-version = ['py310', 'py311', 'py312']
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+# More strict options to consider:
+# disallow_untyped_defs = true
+# disallow_incomplete_defs = true
+# check_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "gitignore_parser.*"
+ignore_missing_imports = true
+[[tool.mypy.overrides]]
+module = "pyperclip.*"
+ignore_missing_imports = true
