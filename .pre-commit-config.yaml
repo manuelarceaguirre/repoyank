@@ -1,0 +1,53 @@
+# .pre-commit-config.yaml
+
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+
+# Default settings for most hooks
+default_language_version:
+  python: python3.10 # Should match project's minimum Python
+
+repos:
+  # Standard hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0 # Use a recent, stable version
+    hooks:
+      - id: trailing-whitespace
+        args: [--markdown-literal-autoconfix]
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ['--maxkb=1024'] # Max 1MB for new files
+
+  # Black for code formatting
+  - repo: https://github.com/psf/black
+    rev: 24.4.2 # Use a recent, stable version
+    hooks:
+      - id: black
+        args:
+          - --line-length=100
+          # - --target-version=py310 # Already configured in pyproject.toml
+
+  # Ruff for linting (replaces flake8, isort, pyupgrade, etc.)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.4.4 # Use a recent, stable version
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix] # Auto-fix and report if fixes were made
+      - id: ruff-format # If you want ruff to also handle formatting (alternative to black)
+        # args: [] # keep this commented out if using black for formatting
+
+  # mypy for static type checking
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.10.0 # Use a recent, stable version
+    hooks:
+      - id: mypy
+        # args: [--config-file=pyproject.toml] # mypy should pick up pyproject.toml by default
+        additional_dependencies:
+          - "textual[dev]" # Add dependencies that mypy needs to understand your code
+          - "types-pyperclip" # If pyperclip has stubs under this name
+          # Add other type stubs if needed, e.g., types-requests
+        # verbose: true # Uncomment for debugging mypy issues
+        # Pass --ignore-missing-imports if not handled in pyproject.toml, but it's better there.
