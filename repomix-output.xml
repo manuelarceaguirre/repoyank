@@ -1,0 +1,1777 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+.editorconfig
+.github/workflows/ci.yml
+.gitignore
+.pre-commit-config.yaml
+CHANGELOG.md
+CODE_OF_CONDUCT.md
+CONTRIBUTING.md
+docs/index.md
+LICENSE
+pyproject.toml
+README.md
+repopacker/__init__.py
+repopacker/app.py
+repopacker/cli.py
+SECURITY.md
+tests/test_smoke.py
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path=".editorconfig">
+# EditorConfig is awesome: https://EditorConfig.org
+
+# top-most EditorConfig file
+root = true
+
+[*]
+indent_style = space
+indent_size = 4
+end_of_line = lf
+charset = utf-8
+trim_trailing_whitespace = true
+insert_final_newline = true
+
+[*.md]
+trim_trailing_whitespace = false
+</file>
+
+<file path=".github/workflows/ci.yml">
+# .github/workflows/ci.yml
+
+name: Python CI for RepoPacker
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch: # Allow manual triggering
+
+permissions:
+  contents: read # Default, needed to checkout the code
+  # id-token: write # For OIDC if publishing to PyPI - not needed for this CI
+  # actions: read # For reusable workflows - not needed here
+
+jobs:
+  build_and_test:
+    name: Build and Test on Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false # Don't cancel all jobs if one fails
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip' # Cache pip dependencies
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install .[dev]
+
+      - name: Lint with Ruff
+        run: |
+          ruff check .
+
+      - name: Format with Black (check only)
+        run: |
+          black . --check
+
+      - name: Type check with MyPy
+        run: |
+          mypy repopacker/ --config-file pyproject.toml
+
+      - name: Run tests with Pytest
+        run: |
+          pytest
+
+      # Placeholder for coverage badge - actual coverage reporting setup is more involved.
+      # This step would typically run after pytest if coverage is configured.
+      # - name: Generate coverage badge
+      #   if: always() && matrix.python-version == '3.11' # Run for one Python version
+      #   uses: # Action to generate and commit badge (e.g., an action that uses coverage.py and shields.io)
+      #   with:
+      #     # Configuration for the badge action
+      #     # coverage_file: coverage.xml 
+      #     # badge_path: docs/img/coverage.svg # Example path
+      #     # github_token: ${{ secrets.GITHUB_TOKEN }} # If committing the badge back
+      #   run: echo "Coverage badge generation would go here." # Placeholder command
+
+# Example of a separate job for publishing to PyPI (would need secrets)
+# publish:
+#   name: Publish to PyPI
+#   needs: build_and_test # Run only if tests pass
+#   runs-on: ubuntu-latest
+#   if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') # Trigger on version tags
+#   environment:
+#     name: pypi
+#     url: https://pypi.org/p/repopacker 
+#   permissions:
+#     id-token: write # Required for trusted publishing
+#   steps:
+#     - name: Checkout code
+#       uses: actions/checkout@v4
+#     - name: Set up Python
+#       uses: actions/setup-python@v5
+#       with:
+#         python-version: '3.11' 
+#     - name: Install build dependencies
+#       run: pip install build
+#     - name: Build package
+#       run: python -m build
+#     - name: Publish package to PyPI
+#       uses: pypa/gh-action-pypi-publish@release/v1
+#       # with:
+#       #   user: __token__
+#       #   password: ${{ secrets.PYPI_API_TOKEN }} # Store your PyPI token as a GitHub secret
+</file>
+
+<file path=".gitignore">
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+#  Usually these files are written by a python script from a template
+#  before PyInstaller builds the exe, so as to inject date/other infos into it.
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Translations
+*.mo
+*.pot
+
+# Django stuff:
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Flask stuff:
+instance/
+.webassets-cache
+
+# Scrapy stuff:
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+.pybuilder/
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+#   For a library or package, you might want to ignore these files since the code is
+#   intended to run in multiple environments; otherwise, check them in:
+# .python-version
+
+# pipenv
+#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
+#   However, in case of collaboration, if having platform-specific dependencies or dependencies
+#   having no cross-platform support, pipenv may install dependencies that don't work, or not
+#   install all needed dependencies.
+#Pipfile.lock
+
+# UV
+#   Similar to Pipfile.lock, it is generally recommended to include uv.lock in version control.
+#   This is especially recommended for binary packages to ensure reproducibility, and is more
+#   commonly ignored for libraries.
+#uv.lock
+
+# poetry
+#   Similar to Pipfile.lock, it is generally recommended to include poetry.lock in version control.
+#   This is especially recommended for binary packages to ensure reproducibility, and is more
+#   commonly ignored for libraries.
+#   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
+#poetry.lock
+
+# pdm
+#   Similar to Pipfile.lock, it is generally recommended to include pdm.lock in version control.
+#pdm.lock
+#   pdm stores project-wide configurations in .pdm.toml, but it is recommended to not include it
+#   in version control.
+#   https://pdm.fming.dev/latest/usage/project/#working-with-version-control
+.pdm.toml
+.pdm-python
+.pdm-build/
+
+# PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
+__pypackages__/
+
+# Celery stuff
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# pytype static type analyzer
+.pytype/
+
+# Cython debug symbols
+cython_debug/
+
+# PyCharm
+#  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
+#  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
+#  and can be added to the global gitignore or merged into this file.  For a more nuclear
+#  option (not recommended) you can uncomment the following to ignore the entire idea folder.
+#.idea/
+
+# Visual Studio Code
+#  Visual Studio Code specific template is maintained in a separate VisualStudioCode.gitignore
+#  that can be found at https://github.com/github/gitignore/blob/main/Global/VisualStudioCode.gitignore
+#  and can be added to the global gitignore or merged into this file. However, if you prefer,
+#  you could uncomment the following to ignore the enitre vscode folder
+# .vscode/
+
+# Ruff stuff:
+.ruff_cache/
+
+# PyPI configuration file
+.pypirc
+
+# Cursor
+#  Cursor is an AI-powered code editor. `.cursorignore` specifies files/directories to
+#  exclude from AI features like autocomplete and code analysis. Recommended for sensitive data
+#  refer to https://docs.cursor.com/context/ignore-files
+.cursorignore
+.cursorindexingignore
+
+# Textual CSS files
+*.tcss
+*.textualcss
+
+# RepoPacker specific files
+.repopacker_recent.txt
+
+# Common virtualenv directories not always covered by default Python gitignore
+.venv/
+venv/
+env/
+ENV/
+VENV/
+
+# IDE specific files (VSCode, SublimeText, PyCharm)
+.vscode/
+*.sublime-project
+*.sublime-workspace
+.idea/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+wheels/
+
+# Other common OS files
+.DS_Store
+Thumbs.db
+</file>
+
+<file path=".pre-commit-config.yaml">
+# .pre-commit-config.yaml
+
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+
+# Default settings for most hooks
+default_language_version:
+  python: python3.10 # Should match project's minimum Python
+
+repos:
+  # Standard hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0 # Use a recent, stable version
+    hooks:
+      - id: trailing-whitespace
+        args: [--markdown-literal-autoconfix]
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ['--maxkb=1024'] # Max 1MB for new files
+
+  # Black for code formatting
+  - repo: https://github.com/psf/black
+    rev: 24.4.2 # Use a recent, stable version
+    hooks:
+      - id: black
+        args:
+          - --line-length=100
+          # - --target-version=py310 # Already configured in pyproject.toml
+
+  # Ruff for linting (replaces flake8, isort, pyupgrade, etc.)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.4.4 # Use a recent, stable version
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix] # Auto-fix and report if fixes were made
+      - id: ruff-format # If you want ruff to also handle formatting (alternative to black)
+        # args: [] # keep this commented out if using black for formatting
+
+  # mypy for static type checking
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.10.0 # Use a recent, stable version
+    hooks:
+      - id: mypy
+        # args: [--config-file=pyproject.toml] # mypy should pick up pyproject.toml by default
+        additional_dependencies:
+          - "textual[dev]" # Add dependencies that mypy needs to understand your code
+          - "types-pyperclip" # If pyperclip has stubs under this name
+          # Add other type stubs if needed, e.g., types-requests
+        # verbose: true # Uncomment for debugging mypy issues
+        # Pass --ignore-missing-imports if not handled in pyproject.toml, but it's better there.
+</file>
+
+<file path="CHANGELOG.md">
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased] - YYYY-MM-DD
+
+### Added
+- Initial release of `repopacker` (v0.1.0).
+- Core functionality: Interactive TUI for selecting repository files.
+- Packing selected files into an AI-friendly prompt format.
+- Clipboard integration for the packed prompt.
+- Basic `.gitignore` and Textual file support.
+- Recent folder history.
+
+### Changed
+- N/A
+
+### Deprecated
+- N/A
+
+### Removed
+- N/A
+
+### Fixed
+- N/A
+
+### Security
+- N/A
+
+## [0.1.0] - YYYY-MM-DD
+- Placeholder for the first official release. This section will be filled out when 0.1.0 is actually released.
+- Typically, the contents of the `[Unreleased]` section are moved here upon release.
+</file>
+
+<file path="CODE_OF_CONDUCT.md">
+# Contributor Covenant Code of Conduct
+
+## Our Pledge
+
+We as members, contributors, and leaders pledge to make participation in our
+community a harassment-free experience for everyone, regardless of age, body
+size, visible or invisible disability, ethnicity, sex characteristics, gender
+identity and expression, level of experience, education, socio-economic status,
+nationality, personal appearance, race, caste, color, religion, or sexual
+identity and orientation.
+
+We pledge to act and interact in ways that contribute to an open, welcoming,
+diverse, inclusive, and healthy community.
+
+## Our Standards
+
+Examples of behavior that contributes to a positive environment for our
+community include:
+
+* Demonstrating empathy and kindness toward other people
+* Being respectful of differing opinions, viewpoints, and experiences
+* Giving and gracefully accepting constructive feedback
+* Accepting responsibility and apologizing to those affected by our mistakes,
+  and learning from the experience
+* Focusing on what is best not just for us as individuals, but for the overall
+  community
+
+Examples of unacceptable behavior include:
+
+* The use of sexualized language or imagery, and sexual attention or advances of
+  any kind
+* Trolling, insulting or derogatory comments, and personal or political attacks
+* Public or private harassment
+* Publishing others' private information, such as a physical or email address,
+  without their explicit permission
+* Other conduct which could reasonably be considered inappropriate in a
+  professional setting
+
+## Enforcement Responsibilities
+
+Community leaders are responsible for clarifying and enforcing our standards of
+acceptable behavior and will take appropriate and fair corrective action in
+response to any behavior that they deem inappropriate, threatening, offensive,
+or harmful.
+
+Community leaders have the right and responsibility to remove, edit, or reject
+comments, commits, code, wiki edits, issues, and other contributions that are
+not aligned to this Code of Conduct, and will communicate reasons for moderation
+decisions when appropriate.
+
+## Scope
+
+This Code of Conduct applies within all community spaces, and also applies when
+an individual is officially representing the community in public spaces.
+Examples of representing our community include using an official email address,
+posting via an official social media account, or acting as an appointed
+representative at an online or offline event.
+
+## Enforcement
+
+Instances of abusive, harassing, or otherwise unacceptable behavior may be
+reported to the community leaders responsible for enforcement at
+Manuel Arce at [INSERT EMAIL ADDRESS HERE].
+All complaints will be reviewed and investigated promptly and fairly.
+
+All community leaders are obligated to respect the privacy and security of the
+reporter of any incident.
+
+## Enforcement Guidelines
+
+Community leaders will follow these Community Impact Guidelines in determining
+the consequences for any action they deem in violation of this Code of Conduct:
+
+### 1. Correction
+
+**Community Impact**: Use of inappropriate language or other behavior deemed
+unprofessional or unwelcome in the community.
+
+**Consequence**: A private, written warning from community leaders, providing
+clarity around the nature of the violation and an explanation of why the
+behavior was inappropriate. A public apology may be requested.
+
+### 2. Warning
+
+**Community Impact**: A violation through a single incident or series of
+actions.
+
+**Consequence**: A warning with consequences for continued behavior. No
+interaction with the people involved, including unsolicited interaction with
+those enforcing the Code of Conduct, for a specified period of time. This
+includes avoiding interactions in community spaces as well as external channels
+like social media. Violating these terms may lead to a temporary or permanent
+ban.
+
+### 3. Temporary Ban
+
+**Community Impact**: A serious violation of community standards, including
+sustained inappropriate behavior.
+
+**Consequence**: A temporary ban from any sort of interaction or public
+communication with the community for a specified period of time. No public or
+private interaction with the people involved, including unsolicited interaction
+with those enforcing the Code of Conduct, is allowed during this period.
+Violating these terms may lead to a permanent ban.
+
+### 4. Permanent Ban
+
+**Community Impact**: Demonstrating a pattern of violation of community
+standards, including sustained inappropriate behavior, harassment of an
+individual, or aggression toward or disparagement of classes of individuals.
+
+**Consequence**: A permanent ban from any sort of public interaction within the
+community.
+
+## Attribution
+
+This Code of Conduct is adapted from the [Contributor Covenant][homepage],
+version 2.1, available at
+[https://www.contributor-covenant.org/version/2/1/code_of_conduct.html][v2.1].
+
+Community Impact Guidelines were inspired by
+[Mozilla's code of conduct enforcement ladder][Mozilla CoC].
+
+For answers to common questions about this code of conduct, see the FAQ at
+[https://www.contributor-covenant.org/faq][FAQ]. Translations are available at
+[https://www.contributor-covenant.org/translations][translations].
+
+[homepage]: https://www.contributor-covenant.org
+[v2.1]: https://www.contributor-covenant.org/version/2/1/code_of_conduct.html
+[Mozilla CoC]: https://github.com/mozilla/diversity
+[FAQ]: https://www.contributor-covenant.org/faq
+[translations]: https://www.contributor-covenant.org/translations
+</file>
+
+<file path="CONTRIBUTING.md">
+# Contributing to RepoPacker
+
+First off, thank you for considering contributing to RepoPacker! We welcome any help, from reporting bugs and suggesting features to writing code and improving documentation.
+
+## Table of Contents
+
+- [Code of Conduct](#code-of-conduct)
+- [How Can I Contribute?](#how-can-i-contribute)
+  - [Reporting Bugs](#reporting-bugs)
+  - [Suggesting Enhancements](#suggesting-enhancements)
+  - [Pull Requests](#pull-requests)
+- [Development Setup](#development-setup)
+  - [Prerequisites](#prerequisites)
+  - [Installation](#installation)
+  - [Running Linters and Formatters](#running-linters-and-formatters)
+  - [Running Tests](#running-tests)
+- [Branching Model](#branching-model)
+- [Commit Message Guidelines](#commit-message-guidelines)
+- [Code Review Process](#code-review-process)
+- [Issue and Pull Request Templates](#issue-and-pull-request-templates)
+
+## Code of Conduct
+
+This project and everyone participating in it is governed by the [RepoPacker Code of Conduct](./CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code. Please report unacceptable behavior to `Manuel Arce at [INSERT EMAIL ADDRESS HERE]`.
+
+## How Can I Contribute?
+
+### Reporting Bugs
+
+If you find a bug, please ensure the bug was not already reported by searching on GitHub under [Issues](https://github.com/username/repopacker/issues).
+
+If you're unable to find an open issue addressing the problem, [open a new one](https://github.com/username/repopacker/issues/new). Be sure to include a **title and clear description**, as much relevant information as possible, and a **code sample or an executable test case** demonstrating the expected behavior that is not occurring.
+
+### Suggesting Enhancements
+
+If you have an idea for an enhancement, please ensure it hasn't already been suggested by searching on GitHub under [Issues](https://github.com/username/repopacker/issues).
+
+If you're unable to find an open issue for your enhancement, [open a new one](https://github.com/username/repopacker/issues/new). Provide a clear description of the enhancement and its potential benefits.
+
+### Pull Requests
+
+1.  Fork the repository and create your branch from `main`.
+2.  If you've added code that should be tested, add tests.
+3.  If you've changed APIs, update the documentation.
+4.  Ensure the test suite passes (`pytest`).
+5.  Make sure your code lints and formats correctly (`ruff check .` and `black .`).
+6.  Issue that pull request!
+
+## Development Setup
+
+### Prerequisites
+
+*   Python 3.10 or higher.
+*   `pip` and `venv` (or your preferred virtual environment tool).
+*   Git.
+
+### Installation
+
+1.  Clone your fork of the repository:
+    ```bash
+    git clone https://github.com/YOUR_USERNAME/repopacker.git # Replace YOUR_USERNAME
+    cd repopacker
+    ```
+
+2.  Create and activate a virtual environment:
+    ```bash
+    python -m venv .venv
+    source .venv/bin/activate  # On Windows use `.venv\Scripts\activate`
+    ```
+
+3.  Install the project in editable mode with development dependencies:
+    ```bash
+    pip install -e ".[dev]"
+    ```
+
+4.  (Optional, but recommended) Install pre-commit hooks:
+    ```bash
+    pre-commit install
+    ```
+    This will run linters and formatters automatically before each commit.
+
+### Running Linters and Formatters
+
+We use `ruff` for linting and `black` for code formatting.
+
+*   To check for linting issues with `ruff`:
+    ```bash
+    ruff check .
+    ```
+*   To automatically fix linting issues with `ruff` (where possible):
+    ```bash
+    ruff check . --fix
+    ```
+*   To format code with `black`:
+    ```bash
+    black .
+    ```
+*   To check formatting with `black` (without making changes):
+    ```bash
+    black . --check
+    ```
+*   To check types with `mypy`:
+    ```bash
+    mypy repopacker/
+    ```
+
+If you installed pre-commit hooks, these checks will run automatically.
+
+### Running Tests
+
+Tests are written using `pytest`. Run them with:
+```bash
+pytest
+```
+
+## Branching Model
+
+*   **`main`**: This is the primary branch representing the latest stable release. Direct pushes to `main` are discouraged.
+*   **Feature Branches**: Create branches from `main` for new features (e.g., `feature/awesome-new-thing`).
+*   **Bugfix Branches**: Create branches from `main` for bug fixes (e.g., `fix/annoying-bug`).
+
+Submit Pull Requests (PRs) to merge your feature/bugfix branches into `main`.
+
+## Commit Message Guidelines
+
+We aim to follow [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/). This makes the commit history more readable and helps automate changelog generation.
+
+A typical commit message looks like:
+```
+feat: Allow custom output file path
+^--^  ^--------------------------^
+|     |
+|     +-> Summary in present tense.
+|
++-------> Type: chore, docs, feat, fix, refactor, style, test.
+```
+
+Example:
+```
+feat: Add keyboard shortcut for toggling sidebar
+
+Adds `Ctrl+B` to show/hide the file selection summary sidebar.
+Helps users with smaller screens maximize tree view space.
+```
+
+If your commit addresses an issue, reference it in the commit body or footer (e.g., `Fixes #123`).
+
+## Code Review Process
+
+*   Once a PR is submitted, at least one core contributor will review it.
+*   Address any feedback or requested changes.
+*   Once approved, the PR will be merged into `main`.
+*   Be patient, as reviews can take time.
+
+## Issue and Pull Request Templates
+
+We may use GitHub issue and pull request templates in the future to streamline submissions. For now, please try to include as much relevant information as possible when creating issues or PRs.
+
+---
+
+Thank you for your contribution!
+</file>
+
+<file path="docs/index.md">
+# Welcome to RepoPacker Documentation
+
+RepoPacker is an interactive TUI (Terminal User Interface) application designed to help you select and pack files from a repository into a single, AI-friendly prompt. This is particularly useful for preparing context for Large Language Models (LLMs), code analysis, or creating archives of specific project components.
+
+## Project Goals
+
+*   Provide an intuitive and efficient way to select files from a project.
+*   Generate a structured output that is easy for AI models to parse.
+*   Respect project configurations like `.gitignore`.
+*   Offer customization for advanced users.
+
+## Navigation
+
+*   **[Installation](./installation.md)**: How to install `repopacker`.
+*   **[Usage](./usage.md)**: Detailed guide on how to use the TUI, including keyboard shortcuts and features.
+*   **[Contributing](./contributing.md)**: Information for developers looking to contribute to the project. This will likely link to the main `CONTRIBUTING.md` in the root or duplicate relevant parts.
+*   **[Code Architecture](./architecture.md)**: (Optional) A deeper dive into the internal structure of `repopacker`.
+*   **[Changelog](./changelog.md)**: Project version history and notable changes. This will likely link to the main `CHANGELOG.md`.
+
+---
+
+*This documentation is currently under development. More details will be added soon.*
+</file>
+
+<file path="LICENSE">
+Copyright 2024 Manuel Arce
+
+Permission is hereby granted, free of charge, to any person obtaining a
+copy of this software and associated documentation files (the
+“Software”), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be included
+in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS
+OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+</file>
+
+<file path="pyproject.toml">
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "repopacker"
+version = "0.1.0"
+description = "Interactive TUI for selecting and packing repository files into an AI-friendly prompt."
+readme = "README.md"
+authors = [
+  { name = "Manuel Arce", email = "author@example.com" },
+]
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Environment :: Console",
+    "Topic :: Software Development",
+    "Topic :: Utilities",
+    "Topic :: Terminals",
+    "Framework :: Textual",
+]
+dependencies = [
+    "textual",
+    "rich",
+    "gitignore-parser",
+    "pyperclip",
+]
+
+[project.urls]
+Homepage = "https://github.com/username/repopacker"
+Repository = "https://github.com/username/repopacker"
+Issues = "https://github.com/username/repopacker/issues"
+
+[project.scripts]
+repopacker = "repopacker.cli:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "ruff>=0.1.0",
+    "black>=23.0",
+    "mypy>=1.0",
+    "textual-dev",
+    "pipdeptree",
+    "mkdocs-material",
+    "mkdocs",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["repopacker*"]
+exclude = ["tests*"]
+
+[tool.ruff]
+line-length = 100
+select = ["E", "F", "W", "I", "UP", "ANN", "ASYNC", "TRIO", "BLE", "B", "A", "C4", "DTZ", "EM", "EXE", "ISC", "ICN", "INP", "PIE", "PYI", "PT", "Q", "RSE", "RET", "SLF", "SIM", "TID", "TCH", "ARG", "PTH", "ERA", "PD", "PGH", "PLC", "PLE", "PLR", "PLW", "RUF"]
+ignore = ["ANN101", "ANN102", "ANN401"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.black]
+line-length = 100
+target-version = ['py310', 'py311', 'py312']
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+# More strict options to consider:
+# disallow_untyped_defs = true
+# disallow_incomplete_defs = true
+# check_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "gitignore_parser.*"
+ignore_missing_imports = true
+[[tool.mypy.overrides]]
+module = "pyperclip.*"
+ignore_missing_imports = true
+</file>
+
+<file path="README.md">
+# RepoPacker
+
+[![PyPI version](https://img.shields.io/pypi/v/repopacker.svg?style=flat-square)](https://pypi.org/project/repopacker/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](./LICENSE)
+[![CI Status](https://img.shields.io/github/actions/workflow/status/username/repopacker/ci.yml?branch=main&style=flat-square)](https://github.com/username/repopacker/actions/workflows/ci.yml)
+[![Python Versions](https://img.shields.io/pypi/pyversions/repopacker.svg?style=flat-square)](https://pypi.org/project/repopacker/)
+
+Interactive TUI for selecting and packing repository files into an AI-friendly prompt.
+
+RepoPacker provides a terminal-based user interface to navigate your project, select specific files
+and directories, and then generate a consolidated text block. This block includes the content of the
+selected files, formatted for easy input into large language models (LLMs) or for archival purposes.
+It respects `.gitignore` rules and offers additional filtering capabilities.
+
+## ✨ Features (Planned/Included)
+
+*   Interactive file tree navigation.
+*   Selection of multiple files and directories.
+*   Respects `.gitignore` files and custom ignore patterns.
+*   Filters out binary files and overly large files.
+*   Copies the packed output to the system clipboard.
+*   Recent project history.
+*   Customizable output format (currently XML-like).
+*   Keyboard-driven interface.
+
+## 🖼️ Screenshot / GIF
+
+![RepoPacker TUI Screenshot](https://via.placeholder.com/800x500.png?text=RepoPacker+TUI+Screenshot+Placeholder)
+*(Animated GIF or actual screenshot of the TUI will be placed here.)*
+
+## 🚀 Quick Start
+
+### Installation
+
+You can install `repopacker` using pipx (recommended for CLI tools) or pip:
+
+**Using pipx:**
+```bash
+pipx install repopacker
+```
+
+**Using pip:**
+```bash
+pip install repopacker
+```
+
+### Basic Usage
+
+To start RepoLlama, simply run the command:
+```bash
+repopacker
+```
+This will open the TUI in the current directory.
+
+You can also specify a path to a project:
+```bash
+repopacker /path/to/your/project
+```
+
+Navigate the tree, select files/folders, and press 'c' to copy the packed content to your
+clipboard.
+
+## ⌨️ Detailed Usage & Keyboard Shortcuts
+
+RepoPacker is designed to be primarily keyboard-driven for efficiency.
+
+### Global Application Shortcuts
+
+| Key             | Action                      | Description                                       |
+|-----------------|-----------------------------|---------------------------------------------------|
+| `Ctrl+Q`        | Quit                        | Exit the application.                             |
+| `F5`            | Open Folder                 | Open the folder selection dialog.                 |
+| `c`             | Copy Prompt                 | Generate and copy the packed file content.        |
+| `a`             | Select All (Project)        | Mark all files/folders in the project for packing.|
+| `d`             | Deselect All (Project)      | Clear all selections in the project.              |
+| `Ctrl+A`        | Select Content (Dir)        | Mark all items within the currently focused folder. |
+| `Ctrl+D`        | Deselect Content (Dir)      | Clear selections within the focused folder.       |
+| `Ctrl+\`       | Command Palette             | (Future feature) Open command palette.            |
+| `F1`            | Toggle Dark/Light           | Switch between dark and light mode.               |
+| `?`             | Help                        | (Future feature) Show help screen.                |
+
+### File Tree Navigation & Selection
+
+| Key             | Action                      | Description                                       |
+|-----------------|-----------------------------|---------------------------------------------------|
+| `Up` / `k`      | Cursor Up                   | Move the cursor up in the tree.                   |
+| `Down` / `j`    | Cursor Down                 | Move the cursor down in the tree.                 |
+| `Enter`         | Toggle Expand/Select        | Expand/collapse a directory or select/deselect a file. |
+| `Space`         | Toggle Select (Item)        | Select/deselect the item under the cursor.        |
+<!-- `Shift+Up/Down` | Extend Selection            | (Future feature) Extend selection up or down. -->
+<!-- `Ctrl+Space`    | Toggle Select (Recursive)   | (Future feature) Select/deselect a folder and its contents. -->
+
+The sidebar on the right will show a list of files that will be included in the packed output based
+on your current selections.
+
+## 🤝 Contributing
+
+Contributions are welcome! Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines on how to
+contribute, including setting up your development environment, our branching model, and coding
+standards.
+
+## 🗺️ Roadmap / TODO
+
+*   [ ] Add support for more fine-grained include/exclude patterns (beyond `.gitignore`).
+*   [ ] Implement configuration file for default ignores, max file size, etc.
+    (`~/.config/repopacker/config.toml`).
+*   [ ] Add options for different output formats (e.g., plain text, JSON).
+*   [ ] Implement a "Copy as Markdown" feature.
+*   [ ] Enhance TUI with more visual cues and better mouse support (where appropriate).
+*   [ ] Develop a comprehensive test suite.
+*   [ ] Add a command palette for quick actions.
+*   [ ] Create a proper help screen within the application.
+*   [ ] Package for conda-forge.
+*   [ ] Improve error handling and reporting in the TUI.
+
+## 📜 License
+
+This project is licensed under the MIT License - see the [LICENSE](./LICENSE) file for details.
+
+Copyright (c) 2024 Manuel Arce.
+
+## 📝 Citation
+
+If you use RepoPacker in your work or research, please consider citing it (details TBD once a
+stable release/DOI is available).
+</file>
+
+<file path="repopacker/__init__.py">
+# repopacker/__init__.py
+
+__version__ = "0.1.0"
+
+# Make main() from cli.py available at the package level
+# e.g., for `python -m repopacker`
+from .cli import main 
+
+# To make the app class available directly (optional, consider if needed for API)
+# from .app import RepoPackerApp
+</file>
+
+<file path="repopacker/app.py">
+import asyncio
+import os
+from pathlib import Path
+import sys # Import sys to access command-line arguments
+from typing import Set, List, Optional, Iterable, Dict, Tuple
+import fnmatch
+
+import platformdirs
+
+from textual.app import App, ComposeResult, Screen
+from textual.containers import Horizontal, Vertical, ScrollableContainer
+from textual.reactive import reactive
+from textual.widgets import Header, Footer, DirectoryTree, Button, Static, Input, Label, Markdown
+from textual.widgets._tree import TreeNode, Tree
+from textual.widgets._directory_tree import DirEntry
+from textual.binding import Binding
+from textual.screen import ModalScreen
+from textual.css.query import NoMatches
+from textual.message import Message
+from textual import events
+from textual.style import Style
+from rich.text import Text
+
+import gitignore_parser
+import pyperclip
+
+# --- Configuration ---
+APP_NAME = "RepoPackerTUI"
+APP_AUTHOR = "RepoPackerUser"
+APP_DATA_DIR = Path(platformdirs.user_data_dir(appname=APP_NAME, appauthor=APP_AUTHOR))
+APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
+RECENT_FOLDERS_FILE = APP_DATA_DIR / "repopacker_recent.txt"
+
+DEFAULT_IGNORES = [
+    ".git/", ".hg/", ".svn/", "__pycache__/", "*.pyc", "*.pyo", "*.pyd",
+    ".Python", "build/", "develop-eggs/", "dist/", "downloads/", "eggs/",
+    ".eggs/", "lib/", "lib64/", "parts/", "sdist/", "var/", "wheels/",
+    "*.egg-info/", ".installed.cfg", "*.egg", "MANIFEST",
+    ".env", ".venv", "env/", "venv/", "ENV/", "VENV/", "node_modules/",
+    "npm-debug.log", "yarn-error.log", ".vscode/", ".idea/",
+    "*.sublime-project", "*.sublime-workspace", ".project", ".classpath",
+    ".cproject", ".settings/", ".DS_Store", "Thumbs.db",
+    "*.png", "*.jpg", "*.jpeg", "*.gif", "*.bmp", "*.tiff", "*.ico",
+    "*.mp3", "*.wav", "*.ogg", "*.flac", "*.mp4", "*.avi", "*.mov",
+    "*.mkv", "*.webm", "*.zip", "*.tar.gz", "*.rar", "*.7z", "*.iso",
+    "*.pdf", "*.doc", "*.docx", "*.ppt", "*.pptx", "*.xls", "*.xlsx",
+    "*.o", "*.so", "*.dll", "*.exe", "*.app", "*.jar", "*.war",
+    "*.sqlite", "*.db", "*.mdb", "*.accdb", "*.log", "*.lock",
+]
+MAX_FILE_SIZE_MB = 10
+MAX_RECENT_ENTRIES = 10
+
+# --- Helper Functions (no changes) ---
+def is_binary_heuristic(filepath: Path, sample_size=1024) -> bool:
+    try:
+        with open(filepath, 'rb') as f: sample = f.read(sample_size)
+        return b'\0' in sample
+    except Exception: return True
+
+def get_file_size_mb(filepath: Path) -> float:
+    try: return filepath.stat().st_size / (1024 * 1024)
+    except OSError: return float('inf')
+
+def load_recent_folders() -> List[Path]:
+    if not RECENT_FOLDERS_FILE.exists(): return []
+    try:
+        with open(RECENT_FOLDERS_FILE, "r", encoding="utf-8") as f:
+            return [Path(line.strip()) for line in f if Path(line.strip()).is_dir()][:MAX_RECENT_ENTRIES]
+    except Exception: return []
+
+def save_recent_folders(folder_path: Path, current_list: List[Path]):
+    new_list = [folder_path] + [p for p in current_list if p != folder_path]
+    try:
+        with open(RECENT_FOLDERS_FILE, "w", encoding="utf-8") as f:
+            for p in new_list[:MAX_RECENT_ENTRIES]: f.write(str(p) + "\n")
+    except Exception as e: print(f"Error saving recent folders to {RECENT_FOLDERS_FILE}: {e}")
+
+
+class CheckableDirectoryTree(DirectoryTree): # (Keep as is from previous correct version)
+    BINDINGS = [
+        Binding("enter", "toggle_expand_or_select", "Expand Dir (Enter)", show=False, priority=True),
+        Binding("space", "space_pressed_on_item", "Select File / Expand Dir (Space)", show=False, priority=True),
+        Binding("s", "toggle_selection_recursive_cursor", "Select Item Recursively (S)", show=False, priority=True),
+    ]
+    class SelectionChanged(Message):
+        def __init__(self, selected_paths: Set[Path], project_root: Path) -> None:
+            super().__init__(); self.selected_paths = selected_paths; self.project_root = project_root
+    def __init__(self, path: str, id: Optional[str] = None, ignored_patterns: Optional[List[str]] = None):
+        super().__init__(path, id=id)
+        self.selected_paths: Set[Path] = set(); self.project_root = Path(path).resolve()
+        self._gitignore_matchers: dict[Path, Optional[callable]] = {}; self.additional_ignored_patterns = ignored_patterns or []
+        self._ignored_paths_cache: Dict[Path, bool] = {}; self._binary_heuristic_cache: Dict[Path, bool] = {}
+        self._file_size_cache: Dict[Path, float] = {}; self._precompiled_default_ignores: List[Tuple[str, bool, str]] = []
+        for pattern_str in DEFAULT_IGNORES + self.additional_ignored_patterns:
+            is_dir_pattern = pattern_str.endswith('/'); normalized_name_pattern = pattern_str.rstrip('/') if is_dir_pattern else pattern_str
+            self._precompiled_default_ignores.append((normalized_name_pattern, is_dir_pattern, pattern_str))
+    def filter_paths(self, paths: Iterable[Path]) -> Iterable[Path]:
+        for path_obj in paths:
+            if not self._is_path_ignored(path_obj): yield path_obj
+    def _is_path_ignored(self, path_obj: Path) -> bool:
+        abs_path_obj = path_obj.resolve() if not path_obj.is_absolute() else path_obj.resolve()
+        if abs_path_obj in self._ignored_paths_cache: return self._ignored_paths_cache[abs_path_obj]
+        try:
+            if not abs_path_obj.is_relative_to(self.project_root) and abs_path_obj != self.project_root:
+                self._ignored_paths_cache[abs_path_obj] = True; return True
+        except ValueError: self._ignored_paths_cache[abs_path_obj] = True; return True
+        for compiled_name_pattern, is_dir_pattern, original_fnmatch_pattern in self._precompiled_default_ignores:
+            if is_dir_pattern:
+                if (abs_path_obj.is_dir() and abs_path_obj.name == compiled_name_pattern) or \
+                   compiled_name_pattern in abs_path_obj.parts:
+                    self._ignored_paths_cache[abs_path_obj] = True; return True
+            elif fnmatch.fnmatch(abs_path_obj.name, original_fnmatch_pattern):
+                self._ignored_paths_cache[abs_path_obj] = True; return True
+        path_to_check_str = str(abs_path_obj); dirs_to_check_for_gitignore = [self.project_root]
+        try: 
+            if abs_path_obj.parent != self.project_root and abs_path_obj.parent.is_relative_to(self.project_root):
+                current_dir = abs_path_obj.parent
+                while current_dir != self.project_root and current_dir != current_dir.parent :
+                    dirs_to_check_for_gitignore.append(current_dir)
+                    if not current_dir.is_relative_to(self.project_root): break 
+                    current_dir = current_dir.parent
+        except ValueError: pass 
+        for gitignore_dir in reversed(dirs_to_check_for_gitignore): 
+            matcher = self._gitignore_matchers.get(gitignore_dir)
+            if matcher is None:
+                gf_path = gitignore_dir / ".gitignore"
+                if gf_path.is_file():
+                    try: matcher = gitignore_parser.parse_gitignore(str(gf_path), base_dir=str(gitignore_dir.resolve()))
+                    except Exception as e: self.app.log(f"Warning: Parse {gf_path}: {e}"); matcher = lambda p: False
+                else: matcher = lambda p: False
+                self._gitignore_matchers[gitignore_dir] = matcher
+            if callable(matcher) and matcher(path_to_check_str):
+                self._ignored_paths_cache[abs_path_obj] = True; return True
+        self._ignored_paths_cache[abs_path_obj] = False; return False
+    def _is_node_effectively_selected_file(self, file_path: Path) -> bool:
+        if self._is_path_ignored(file_path): return False 
+        is_bin = self._binary_heuristic_cache.get(file_path)
+        if is_bin is None: is_bin = is_binary_heuristic(file_path); self._binary_heuristic_cache[file_path] = is_bin
+        if is_bin: return False
+        size_mb = self._file_size_cache.get(file_path)
+        if size_mb is None: size_mb = get_file_size_mb(file_path); self._file_size_cache[file_path] = size_mb
+        if size_mb > MAX_FILE_SIZE_MB: return False
+        if file_path in self.selected_paths: return True
+        current_parent = file_path.parent
+        while current_parent != self.project_root.parent and current_parent != current_parent.parent : 
+            try: is_relevant_parent = (current_parent == self.project_root or current_parent.is_relative_to(self.project_root))
+            except ValueError: is_relevant_parent = False
+            if not is_relevant_parent: break 
+            if current_parent in self.selected_paths: return True
+            if current_parent == self.project_root: break 
+            current_parent = current_parent.parent
+        return False
+    def render_label(self, node: TreeNode[DirEntry], base_style: Style, style: Style) -> Text:
+        rendered_label_from_super = super().render_label(node, base_style, style)
+        if node.data is None: return Text("Error: No data") 
+        node_fs_path = node.data.path
+        is_directly_selected = node_fs_path in self.selected_paths
+        prefix_text = Text.from_markup("[green]✓ [/]" if is_directly_selected else "  ")
+        final_renderable = Text("").append(prefix_text).append(rendered_label_from_super)
+        if node_fs_path.is_file() and self._is_node_effectively_selected_file(node_fs_path): 
+            final_renderable.append_text(Text(" [b #40E0D0](pack)[/b]", no_wrap=True))
+        return final_renderable
+    def _toggle_single_node_selection(self, node_fs_path: Path):
+        self.app.log(f"Toggling single selection: {node_fs_path}")
+        if node_fs_path in self.selected_paths: self.selected_paths.discard(node_fs_path)
+        else:
+            if self._is_path_ignored(node_fs_path): 
+                self.app.log(f"Path ignored, not selecting: {node_fs_path}"); self.app.bell(); return
+            self.selected_paths.add(node_fs_path)
+        self.refresh(); self.post_message(self.SelectionChanged(self.selected_paths.copy(), self.project_root))
+    def _toggle_node_and_children_selection(self, node_fs_path: Path):
+        self.app.log(f"Toggling node and children selection: {node_fs_path}")
+        is_currently_selected = node_fs_path in self.selected_paths
+        new_select_state = not is_currently_selected
+        self._apply_selection_recursive(node_fs_path, new_select_state)
+        self.refresh(); self.post_message(self.SelectionChanged(self.selected_paths.copy(), self.project_root))
+    def _apply_selection_recursive(self, node_fs_path: Path, select_state: bool):
+        if select_state:
+            if not self._is_path_ignored(node_fs_path): self.selected_paths.add(node_fs_path)
+        else: self.selected_paths.discard(node_fs_path)
+        if node_fs_path.is_dir():
+            try:
+                for child_item_path in self.filter_paths(node_fs_path.iterdir()): 
+                    self._apply_selection_recursive(child_item_path, select_state)
+            except OSError as e: self.app.log(f"OS Error applying recursive selection for {node_fs_path}: {e}")
+    def action_toggle_expand_or_select(self) -> None:
+        if self.cursor_node and self.cursor_node.data:
+            node_fs_path = self.cursor_node.data.path
+            if node_fs_path.is_dir():
+                self.app.log(f"Enter on dir: {node_fs_path}, calling action_toggle_node. Current expanded: {self.cursor_node._expanded}")
+                self.action_toggle_node() 
+                self.app.log(f"After action_toggle_node (Enter). New expanded: {self.cursor_node._expanded}")
+    def action_space_pressed_on_item(self) -> None:
+        if self.cursor_node and self.cursor_node.data:
+            node_fs_path = self.cursor_node.data.path
+            self.app.log(f"action_space_pressed_on_item on: {node_fs_path}")
+            if node_fs_path.is_file():
+                self.app.log(f"Space on file: {node_fs_path}, toggling single selection.")
+                self._toggle_single_node_selection(node_fs_path)
+            elif node_fs_path.is_dir():
+                self.app.log(f"Space on dir: {node_fs_path}, calling action_toggle_node. Current expanded: {self.cursor_node._expanded}")
+                self.action_toggle_node() 
+                self.app.log(f"After action_toggle_node (Space). New expanded: {self.cursor_node._expanded}")
+        else: self.app.log("action_space_pressed_on_item: No cursor node or data.")
+    def on_tree_node_selected(self, event: Tree.NodeSelected[DirEntry]) -> None:
+        event.stop() 
+        if event.node is None or event.node.data is None:
+            self.app.log("Tree.NodeSelected (likely click) event with no node or no data."); return
+        node_fs_path = event.node.data.path
+        self.app.log(f"Click (Tree.NodeSelected event) on: {node_fs_path}")
+        if node_fs_path.is_file():
+            self.app.log(f"Click on file: {node_fs_path}, toggling single selection.")
+            self._toggle_single_node_selection(node_fs_path)
+        elif node_fs_path.is_dir():
+            self.app.log(f"Click on dir: {node_fs_path}. Expansion may be handled by default DirectoryTree click behavior. Current expanded state (before potential default toggle): {event.node._expanded}")
+    def action_toggle_selection_recursive_cursor(self) -> None:
+        self.app.bell() 
+        self.app.log("--- 'S' KEY ACTION CALLED (toggle_selection_recursive_cursor) ---") 
+        if self.cursor_node and self.cursor_node.data:
+            node_fs_path = self.cursor_node.data.path
+            self.app.log(f"'s' key on: {node_fs_path}")
+            if node_fs_path.is_file():
+                self.app.log(f"'s' key on file: {node_fs_path}, toggling single selection.")
+                self._toggle_single_node_selection(node_fs_path)
+            elif node_fs_path.is_dir():
+                self.app.log(f"'s' key on dir: {node_fs_path}, toggling recursive selection.")
+                self._toggle_node_and_children_selection(node_fs_path)
+        else: self.app.log("'s' key pressed but no cursor node or data.")
+    async def on_key(self, event: events.Key) -> None:
+        key_handled_by_us = False
+        if event.key == "j":
+            if self.cursor_node is not None: self.action_cursor_down(); key_handled_by_us = True
+        elif event.key == "k":
+            if self.cursor_node is not None: self.action_cursor_up(); key_handled_by_us = True
+        if key_handled_by_us: event.prevent_default()
+    def get_selected_final_files(self) -> List[Path]:
+        collected_files: Set[Path] = set(); already_processed_for_collection: Set[Path] = set() 
+        for path_obj_abs in self.selected_paths: 
+            if path_obj_abs.is_file() and path_obj_abs not in already_processed_for_collection:
+                if not self._is_path_ignored(path_obj_abs):
+                    is_bin = self._binary_heuristic_cache.get(path_obj_abs)
+                    if is_bin is None: is_bin = is_binary_heuristic(path_obj_abs); self._binary_heuristic_cache[path_obj_abs] = is_bin
+                    size_mb = self._file_size_cache.get(path_obj_abs)
+                    if size_mb is None: size_mb = get_file_size_mb(path_obj_abs); self._file_size_cache[path_obj_abs] = size_mb
+                    if not is_bin and size_mb <= MAX_FILE_SIZE_MB: collected_files.add(path_obj_abs)
+                already_processed_for_collection.add(path_obj_abs)
+        for selected_path_abs in self.selected_paths:
+            if selected_path_abs.is_dir():
+                if not self._is_path_ignored(selected_path_abs): 
+                    try:
+                        for item_abs in selected_path_abs.rglob("*"): 
+                            if item_abs.is_file() and item_abs not in already_processed_for_collection:
+                                if not self._is_path_ignored(item_abs): 
+                                    is_bin = self._binary_heuristic_cache.get(item_abs)
+                                    if is_bin is None: is_bin = is_binary_heuristic(item_abs); self._binary_heuristic_cache[item_abs] = is_bin
+                                    size_mb = self._file_size_cache.get(item_abs)
+                                    if size_mb is None: size_mb = get_file_size_mb(item_abs); self._file_size_cache[item_abs] = size_mb
+                                    if not is_bin and size_mb <= MAX_FILE_SIZE_MB: collected_files.add(item_abs)
+                                already_processed_for_collection.add(item_abs)
+                    except OSError as e: self.app.log(f"OS Error rglobbing {selected_path_abs}: {e}")
+                already_processed_for_collection.add(selected_path_abs) 
+        relative_collected_files = set()
+        if self.project_root:
+            for abs_file_path in sorted(list(collected_files)):
+                try:
+                    if abs_file_path.is_relative_to(self.project_root):
+                         relative_collected_files.add(abs_file_path.relative_to(self.project_root))
+                except ValueError: self.app.log(f"ValueError making {abs_file_path} relative to {self.project_root}")
+        return sorted(list(relative_collected_files))
+
+
+class PathInputScreen(ModalScreen[Optional[Path]]): # (Keep as is)
+    BINDINGS = [
+        Binding("escape", "cancel", "Cancel", show=False),
+        Binding("up", "cursor_up", "Cursor Up", show=False),
+        Binding("down", "cursor_down", "Cursor Down", show=False),
+    ]
+    DEFAULT_CSS = """
+    PathInputScreen { align: center top; padding-top: 2; background: $panel-lighten-1; }
+    #path_input_dialog_content { width: 80%; max-width: 60; height: auto; border: tall $primary-lighten-2; padding: 1 2; background: $surface; }
+    #path_input_widget { margin-top: 1; margin-bottom: 1; }
+    #recent_folders_scroller { max-height: 10; border: round $primary-lighten-2; padding: 0 1; margin-top: 1; }
+    .recent_folder_item { width: 100%; height: 1; padding: 0 1; border: none; background: transparent; text-align: left; color: $text; margin-bottom: 0; }
+    .recent_folder_item:hover { background: $primary-background-lighten-2; }
+    .recent_folder_item:focus { background: $primary; }
+    """
+    def __init__(self, recent_folders: List[Path]):
+        super().__init__(); self.recent_folders = recent_folders
+        self.input_widget: Optional[Input] = None; self.recent_folder_widgets: List[Button] = []
+        self._current_focus_idx = -1 
+    def compose(self) -> ComposeResult:
+        self.recent_folder_widgets.clear()
+        with Vertical(id="path_input_dialog_content"):
+            yield Label("Enter Project Path or Select Recent (↓/↑, Enter):")
+            self.input_widget = Input(placeholder="Type path or press number (1-9)", id="path_input_widget" )
+            yield self.input_widget
+            if self.recent_folders:
+                yield Label("Recent Folders:") 
+                with ScrollableContainer(id="recent_folders_scroller"): 
+                    for i, folder in enumerate(self.recent_folders):
+                        button = Button(f"{i+1}. {str(folder)}", id=f"recent_{i}", classes="recent_folder_item")
+                        self.recent_folder_widgets.append(button); yield button
+    async def on_mount(self) -> None:
+        if self.input_widget: self.input_widget.focus(); self._current_focus_idx = -1
+    def _focus_widget_by_idx(self):
+        if self._current_focus_idx == -1:
+            if self.input_widget: self.input_widget.focus()
+        elif 0 <= self._current_focus_idx < len(self.recent_folder_widgets):
+            self.recent_folder_widgets[self._current_focus_idx].focus()
+    def action_cursor_up(self) -> None:
+        if not self.recent_folder_widgets and self.input_widget: self.input_widget.focus(); self._current_focus_idx = -1; return
+        if self._current_focus_idx == -1: 
+            if self.recent_folder_widgets: self._current_focus_idx = len(self.recent_folder_widgets) - 1
+        elif self._current_focus_idx == 0: self._current_focus_idx = -1
+        else: self._current_focus_idx -= 1
+        self._focus_widget_by_idx()
+        if self._current_focus_idx != -1:
+            try: self.query_one("#recent_folders_scroller", ScrollableContainer).scroll_to_widget(self.recent_folder_widgets[self._current_focus_idx], animate=False, top=True)
+            except NoMatches: pass 
+    def action_cursor_down(self) -> None:
+        if not self.recent_folder_widgets and self.input_widget: self.input_widget.focus(); self._current_focus_idx = -1; return
+        if self._current_focus_idx == -1: 
+            if self.recent_folder_widgets: self._current_focus_idx = 0
+        elif self._current_focus_idx == len(self.recent_folder_widgets) - 1: self._current_focus_idx = -1
+        else: self._current_focus_idx += 1
+        self._focus_widget_by_idx()
+        if self._current_focus_idx != -1:
+            try: self.query_one("#recent_folders_scroller", ScrollableContainer).scroll_to_widget(self.recent_folder_widgets[self._current_focus_idx], animate=False, top=False)
+            except NoMatches: pass 
+    async def on_key(self, event: events.Key) -> None:
+        is_input_focused = self.input_widget and self.input_widget.has_focus
+        is_input_empty = self.input_widget and not self.input_widget.value
+        if event.key.isdigit() and '0' not in event.key:
+            if (is_input_focused and is_input_empty) or not is_input_focused:
+                try:
+                    index = int(event.key) - 1
+                    if 0 <= index < len(self.recent_folders) and index < 9:
+                        self.dismiss(self.recent_folders[index].resolve()); event.prevent_default(); return
+                except ValueError: pass
+    async def on_input_submitted(self, event: Input.Submitted) -> None:
+        path_str = event.value.strip()
+        if path_str.isdigit(): 
+            try:
+                index = int(path_str) - 1
+                if 0 <= index < len(self.recent_folders): self.dismiss(self.recent_folders[index].resolve()); return
+            except ValueError: pass 
+        if path_str:
+            path = Path(path_str).resolve()
+            if path.is_dir(): self.dismiss(path)
+            else:
+                if self.input_widget: self.app.bell(); self.input_widget.value = "" 
+        else: self.app.bell()
+    async def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id and event.button.id.startswith("recent_"):
+            try:
+                index = int(event.button.id.split("_")[1])
+                if 0 <= index < len(self.recent_folders): self.dismiss(self.recent_folders[index].resolve())
+            except (ValueError, IndexError): self.app.bell()
+    def action_cancel(self) -> None: self.dismiss(None)
+
+
+class RepoPackerApp(App[None]):
+    TITLE = "Repo Packer TUI"; CSS_PATH = None
+    CSS = """
+    Screen { layout: vertical; overflow-y: auto; }
+    Header { height: auto; } Footer { height: auto; }
+    #app_body { layout: horizontal; height: 1fr; }
+    #tree_panel { width: 2fr; height: 100%; }
+    #sidebar_panel { width: 1fr; height: 100%; border-left: wide $primary-lighten-2; padding: 0 1; }
+    #sidebar_panel Markdown { width: 100%; height: 100%; overflow-y: auto;}
+    CheckableDirectoryTree { border: round $primary; width: 100%; height: 100%; margin: 1 0; }
+    #tree_placeholder { padding: 1; color: $text-muted; width: 100%; height: 100%; content-align: center middle; }
+    #status_bar { dock: bottom; width: 100%; height: 1; padding: 0 1; background: $primary-background; color: $text; }
+    """
+    BINDINGS = [
+        Binding("ctrl+q", "quit", "Quit", show=True, priority=True),
+        Binding("f5", "open_folder", "Open Folder", show=False), 
+        Binding("c", "generate_packed_file", "Copy Prompt", show=True),
+        Binding("a", "select_all_tree", "Select All (Project)", show=True),
+        Binding("d", "deselect_all_tree", "Deselect All (Project)", show=True),
+        Binding("ctrl+a", "select_in_focused_folder", "Sel Content (Dir)", show=True),
+        Binding("ctrl+d", "deselect_in_focused_folder", "Desel Content (Dir)", show=True),
+        Binding("ctrl+backslash", "command_palette", "Palette", show=False, key_display="Ctrl+\\"),
+        Binding("f1", "toggle_dark", "Dark/Light", show=False),
+        Binding("question_mark", "app.help", "Help", show=False),
+    ]
+    current_project_path: reactive[Optional[Path]] = reactive(None)
+    status_message = reactive("Ready. F5 to Open, 'c' to Copy Prompt.")
+
+    # MODIFIED: Accept initial_path from constructor
+    def __init__(self, initial_path_from_arg: Optional[Path] = None):
+        super().__init__()
+        self.arg_initial_path = initial_path_from_arg # Store the path passed from main
+        self.recent_folders = load_recent_folders()
+        self.log(f"Application data directory: {APP_DATA_DIR}")
+        self.log(f"Recent folders file path: {RECENT_FOLDERS_FILE}")
+        if self.arg_initial_path:
+            self.log(f"Initial path from argument: {self.arg_initial_path}")
+        else:
+            self.log("No initial path argument provided.")
+
+    def compose(self) -> ComposeResult: # (Keep as is)
+        yield Header()
+        with Horizontal(id="app_body"):
+            with Vertical(id="tree_panel"): pass
+            with ScrollableContainer(id="sidebar_panel"):
+                yield Markdown("### Selected Files\n\n_None selected_", id="selected_files_md")
+        yield Static(self.status_message, id="status_bar"); yield Footer()
+
+    # MODIFIED: Use self.arg_initial_path first, then os.getcwd()
+    async def on_mount(self) -> None:
+        path_to_load: Optional[Path] = None
+        source_of_path: str = ""
+
+        # 1. Try path from command-line argument (passed via constructor)
+        if self.arg_initial_path and self.arg_initial_path.is_dir():
+            path_to_load = self.arg_initial_path
+            source_of_path = "command-line argument"
+        elif self.arg_initial_path: # Argument provided but not a valid directory
+            self.log(f"Warning: Initial path from argument '{self.arg_initial_path}' is not a valid directory.")
+            self.notify(f"Path '{self.arg_initial_path}' invalid.", severity="warning", timeout=3)
+
+
+        # 2. If no valid arg, try current working directory (os.getcwd())
+        if not path_to_load:
+            try:
+                cwd = Path(os.getcwd())
+                if cwd.is_dir():
+                    path_to_load = cwd
+                    source_of_path = "current working directory (os.getcwd())"
+                else:
+                    self.log(f"Warning: os.getcwd() '{cwd}' is not a valid directory.")
+            except Exception as e:
+                self.log(f"Error getting os.getcwd(): {e}")
+        
+        if path_to_load:
+            self.log(f"Attempting to load initial path from {source_of_path}: {path_to_load}")
+            self.current_project_path = path_to_load
+        else:
+            self.log("No valid initial path found from args or CWD. Opening PathInputScreen.")
+            await self.action_open_folder() # Fallback to manual selection
+        
+        # Ensure sidebar is updated even if no specific selection event fires initially
+        try:
+            if self.query(CheckableDirectoryTree): 
+                tree_list = self.query(CheckableDirectoryTree) 
+                if tree_list and tree_list.first().project_root: 
+                    tree_list.first().post_message(CheckableDirectoryTree.SelectionChanged(set(), tree_list.first().project_root)) 
+            else: self.query_one("#selected_files_md", Markdown).update("### Selected Files\n\n_None selected_")
+        except Exception as e: self.log(f"Error in on_mount sidebar clearing: {e}")
+
+
+    def watch_current_project_path(self, old_path: Optional[Path], new_path: Optional[Path]) -> None: # (Keep as is)
+        try: self.query_one("#tree_panel").remove_children()
+        except NoMatches: self.log("Error: #tree_panel not found during watch"); return
+        try: self.query_one("#selected_files_md", Markdown).update("### Selected Files\n\n_None selected_")
+        except NoMatches: pass
+        if new_path and new_path.is_dir():
+            tree = CheckableDirectoryTree(str(new_path), id="dir_tree")
+            self.query_one("#tree_panel").mount(tree); self.call_after_refresh(tree.focus)
+            save_recent_folders(new_path, self.recent_folders); self.recent_folders = load_recent_folders()
+            self.sub_title = str(new_path); self.status_message = f"Project: {new_path.name}. Select items. 'c' to Copy."
+        else:
+            self.query_one("#tree_panel").mount(Static("No project loaded. Open a folder (F5).", id="tree_placeholder"))
+            self.sub_title = "No Project"; self.status_message = "No project. Open (F5), Copy ('c')."
+            if old_path and not new_path: self.notify("Folder selection cancelled or failed.", severity="warning")
+    
+    def watch_status_message(self, new_message: str) -> None: # (Keep as is)
+        try: self.query_one("#status_bar", Static).update(new_message)
+        except NoMatches: pass
+    
+    async def on_checkable_directory_tree_selection_changed(self, event: CheckableDirectoryTree.SelectionChanged) -> None: # (Keep as is)
+        try:
+            md_widget = self.query_one("#selected_files_md", Markdown)
+            tree = self.query_one(CheckableDirectoryTree) 
+            final_files = tree.get_selected_final_files() 
+            if not final_files: md_widget.update("### Selected Files\n\n_No packable files based on current selection._"); return
+            display_items = [f"- `{str(rel_path)}`" for rel_path in sorted(final_files)]
+            md_widget.update(f"### Selected Files ({len(display_items)})\n\n" + "\n".join(display_items))
+        except NoMatches: self.log("Error: Widget not found for sidebar update.")
+        except Exception as e: self.log(f"Error updating sidebar: {e}")
+    
+    async def action_open_folder(self) -> None: # (Keep as is)
+        def set_new_path(path: Optional[Path]):
+            if path: self.current_project_path = path
+            elif not self.current_project_path: self.notify("No folder selected.", severity="information")
+        await self.app.push_screen(PathInputScreen(self.recent_folders), set_new_path)
+    
+    def action_select_all_tree(self) -> None: # (Keep as is)
+        try:
+            tree = self.query_one(CheckableDirectoryTree)
+            if tree.project_root: tree._apply_selection_recursive(tree.project_root, select_state=True) 
+            tree.refresh(); tree.post_message(CheckableDirectoryTree.SelectionChanged(tree.selected_paths.copy(), tree.project_root))
+            self.status_message = f"{sum(1 for p in tree.selected_paths if not tree._is_path_ignored(p))} items marked."
+        except NoMatches: self.status_message = "No project tree loaded."; self.bell()
+        except Exception as e: self.status_message = f"Error selecting all: {e}"; self.log(f"Select All Error: {e}"); self.bell()
+    
+    def action_deselect_all_tree(self) -> None: # (Keep as is)
+        try:
+            tree = self.query_one(CheckableDirectoryTree)
+            if tree.project_root: tree._apply_selection_recursive(tree.project_root, select_state=False)
+            else: tree.selected_paths.clear() 
+            tree.refresh(); tree.post_message(CheckableDirectoryTree.SelectionChanged(tree.selected_paths.copy(), tree.project_root))
+            self.status_message = "All selections cleared."
+        except NoMatches: self.status_message = "No project tree loaded."; self.bell()
+    
+    def _operate_on_focused_folder_contents(self, select_state: bool): # (Keep as is)
+        try:
+            tree = self.query_one(CheckableDirectoryTree)
+            if tree.cursor_node and tree.cursor_node.data:
+                node_path = tree.cursor_node.data.path
+                if node_path.is_dir(): 
+                    for child_item in tree.filter_paths(node_path.iterdir()):
+                        tree._apply_selection_recursive(child_item, select_state)
+                    tree.refresh(); tree.post_message(CheckableDirectoryTree.SelectionChanged(tree.selected_paths.copy(), tree.project_root))
+                    self.status_message = f"{'Selected' if select_state else 'Deselected'} contents of '{node_path.name}'."
+                else: self.status_message = "Focused item is not a directory."; self.bell() 
+            else: self.status_message = "No item focused."; self.bell()
+        except NoMatches: self.status_message = "No project tree loaded."; self.bell()
+    
+    def action_select_in_focused_folder(self) -> None: self._operate_on_focused_folder_contents(select_state=True)
+    def action_deselect_in_focused_folder(self) -> None: self._operate_on_focused_folder_contents(select_state=False)
+    
+    async def action_generate_packed_file(self) -> None: # (Keep as is)
+        if not self.current_project_path: self.notify("Error: No project folder loaded.", severity="error", timeout=3); self.bell(); return
+        try: tree = self.query_one(CheckableDirectoryTree); selected_paths = tree.get_selected_final_files() 
+        except NoMatches: self.notify("Error: Project tree not found.", severity="error", timeout=3); self.bell(); return
+        if not selected_paths: self.notify("Warning: No files selected/eligible.", severity="warning", timeout=3); self.bell(); return
+        output_parts = ["<file_summary>", "This section contains a summary of this file.", "", "<purpose>", "This file contains a packed representation of selected repository contents.", "It is designed to be easily consumable by AI systems for analysis, code review,","or other automated processes.","</purpose>","","<file_format>", "The content is organized as follows:","1. This summary section","2. Directory structure of selected files","3. Selected repository files, each consisting of:","  - File path as an attribute (relative to project root)","  - Full contents of the file","</file_format>","","<usage_guidelines>","- This file should be treated as read-only. Any changes should be made to the","  original repository files, not this packed version.","- When processing this file, use the file path to distinguish","  between different files in the repository.","- Be aware that this file may contain sensitive information. Handle it with","  the same level of security as you would the original repository.","</usage_guidelines>","","<notes>","- Files are selected based on user interaction and ignore rules.","- Binary files (based on a heuristic) are excluded.","- Files matching patterns in .gitignore (if present) and default ignore patterns (e.g., .git, __pycache__) are typically excluded from selection and packing.",f"- File size limits may apply (currently >{MAX_FILE_SIZE_MB}MB excluded).","</notes>","","<additional_info>",f"Generated by RepoPacker TUI from project: {self.current_project_path.name}","</additional_info>","</file_summary>","","<directory_structure>"]
+        for rel_path in selected_paths: output_parts.append(str(rel_path).replace('\\', '/')) 
+        output_parts.extend(["</directory_structure>", "", "<files>", "This section contains the contents of the repository's selected files."])
+        if selected_paths: output_parts.append("")
+        files_processed = 0; self.status_message = "Preparing content..."; await asyncio.sleep(0.01) 
+        for i, rel_path in enumerate(selected_paths):
+            full_path = self.current_project_path / rel_path
+            try:
+                with open(full_path, 'r', encoding='utf-8', errors='replace') as f: content = f.read()
+                output_parts.extend([f'<file path="{str(rel_path).replace("\\", "/")}">{content}</file>'])
+                if i < len(selected_paths) -1: output_parts.append("")
+                files_processed += 1
+            except Exception as e:
+                self.log(f"Error reading {full_path}: {e}")
+                output_parts.extend([f'<file path="{str(rel_path).replace("\\", "/")}">{os.linesep}Error reading file: {e}{os.linesep}</file>'])
+                if i < len(selected_paths) -1: output_parts.append("")
+        output_parts.append("</files>")
+        final_output = "\n".join(output_parts)
+        try: pyperclip.copy(final_output); self.notify(f"{files_processed} files packed & copied!", severity="information", timeout=4); self.status_message = "Prompt copied."
+        except pyperclip.PyperclipException as e: self.log(f"Clipboard error: {e}"); self.notify("Clipboard error.", severity="error", timeout=5); self.status_message = "Clipboard error."
+        except Exception as e: self.log(f"Pack error: {e}"); self.notify("Unexpected error.", severity="error", timeout=5); self.status_message = "Error packing."
+
+
+# MODIFIED: Logic to determine initial_path_for_app
+if __name__ == "__main__":
+    initial_path_for_app: Optional[Path] = None
+    
+    # Check for command-line argument first
+    if len(sys.argv) > 1:
+        path_arg_str = sys.argv[1]
+        # If Neovim passes ".", resolve it to an absolute path based on CWD
+        if path_arg_str == ".":
+            try:
+                path_arg = Path(os.getcwd()).resolve()
+            except Exception as e:
+                print(f"Warning: Could not resolve '.' to current working directory: {e}")
+                path_arg = None # Fallback or handle error
+        else:
+            path_arg = Path(path_arg_str)
+        
+        if path_arg and path_arg.is_dir():
+            initial_path_for_app = path_arg.resolve()
+            print(f"Using initial path from command line argument: {initial_path_for_app}")
+        elif path_arg:
+            print(f"Warning: Provided path argument '{path_arg}' is not a valid directory. Will try CWD or prompt.")
+        else: # path_arg was None from "." resolution failure
+            print(f"Warning: Could not use '.' as initial path. Will try CWD or prompt.")
+
+    # If no valid path from argument, initial_path_for_app is still None
+    # The RepoPackerApp.on_mount() method will then try os.getcwd()
+    
+    app = RepoPackerApp(initial_path_from_arg=initial_path_for_app)
+    app.run()
+</file>
+
+<file path="repopacker/cli.py">
+# repopacker/cli.py
+
+import sys
+from pathlib import Path
+# We assume repoyank.py will be moved to repopacker/app.py
+# and the RepoPackerApp class is defined there.
+from .app import RepoPackerApp 
+
+def main() -> None:
+    initial_folder: Path | None = None
+    if len(sys.argv) > 1:
+        path_arg_str = sys.argv[1]
+        # Basic check for help flags, can be expanded later with argparse
+        if path_arg_str in ("-h", "--help"):
+            # For now, just print a simple help message.
+            # A more sophisticated CLI argument parser like argparse or typer
+            # could be added later if more CLI options are needed.
+            print("Usage: repopacker [optional_path_to_project]")
+            print("\nInteractive TUI for selecting and packing repository files into an AI-friendly prompt.")
+            sys.exit(0)
+
+        path_arg = Path(path_arg_str)
+        if path_arg.is_dir():
+            initial_folder = path_arg.resolve()
+        else:
+            print(f"Warning: Provided path '{path_arg_str}' is not a valid directory. Starting without initial project.")
+            # Optionally, exit here or let the app open its folder selection dialog
+            # For now, we'll let the app handle it by starting without a path.
+
+    app = RepoPackerApp(initial_path=initial_folder)
+    app.run()
+
+if __name__ == "__main__":
+    # This allows running the cli directly for testing, though the entry point
+    # via pyproject.toml will call main().
+    main()
+</file>
+
+<file path="SECURITY.md">
+# Security Policy
+
+## Supported Versions
+
+We are committed to ensuring the security of the `repopacker` project. Security updates and support are provided for the following versions:
+
+| Version | Supported          |
+| ------- | ------------------ |
+| 0.1.x   | :white_check_mark: |
+| < 0.1.0 | :x:                |
+
+## Reporting a Vulnerability
+
+We take all security vulnerabilities seriously. If you discover a security issue, please report it to us privately. This will help ensure that we can address the vulnerability before it is publicly disclosed.
+
+Please email your findings to **[INSERT PROJECT SECURITY EMAIL ADDRESS HERE]**.
+
+We kindly ask you to:
+
+- Provide detailed information about the vulnerability, including steps to reproduce it.
+- Allow us a reasonable amount of time to investigate and address the issue before making any public disclosures.
+- Not exploit the vulnerability or access, modify, or delete data that does not belong to you.
+
+We aim to acknowledge receipt of your vulnerability report within 48 hours and will work with you to understand and resolve the issue. We appreciate your efforts and responsible disclosure to help us maintain the security of `repopacker`.
+</file>
+
+<file path="tests/test_smoke.py">
+# tests/test_smoke.py
+
+import pytest
+import asyncio
+from pathlib import Path
+
+from repopacker.app import RepoPackerApp
+from repopacker.app import PathInputScreen # Import for type checking
+
+@pytest.mark.asyncio
+async def test_app_initialization_and_headless_exit():
+    """
+    Test that the RepoPackerApp can be initialized and exits cleanly in a headless environment.
+    """
+    app = RepoPackerApp(initial_path=None)
+
+    async def short_run_then_exit():
+        # Allow the app to initialize and potentially show its first screen
+        await asyncio.sleep(0.2)
+        
+        # Attempt to gracefully quit the app
+        if app.is_running and not app.is_exiting:
+            # If PathInputScreen is active, sending escape should close it.
+            # Check the type of the active screen before calling action_cancel
+            active_screen = app.screen_stack[-1]
+            if isinstance(active_screen, PathInputScreen):
+                 await active_screen.action_cancel()
+                 await asyncio.sleep(0.1) # allow screen to process dismissal
+            
+            if app.is_running and not app.is_exiting:
+                await app.action_quit()
+
+    try:
+        await app.run_test(
+            run_before=short_run_then_exit, 
+            headless=True, 
+            size=None, 
+            wait_for_idle_timeout=5.0
+        )
+    except asyncio.TimeoutError:
+        if app.is_running and not app.is_exiting:
+            await app.action_quit() # Attempt to force quit if timed out
+        pytest.fail("App run_test timed out, indicating it did not exit cleanly or got stuck.")
+    except Exception as e:
+        pytest.fail(f"App initialization or run_test raised an exception: {e}")
+    
+    assert True # If no exceptions, test passes
+</file>
+
+</files>
